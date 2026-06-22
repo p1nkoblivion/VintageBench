@@ -258,6 +258,30 @@ export class refModel {
 		mat.map = tex;
 		return mat;
 	}
+	getTransparentMaterial() {
+		if (!this.transparent_material) {
+			this.transparent_material = new THREE.MeshBasicMaterial({
+				color: 0x000000,
+				transparent: true,
+				opacity: 0,
+				depthWrite: false,
+				side: THREE.DoubleSide
+			});
+		}
+		return this.transparent_material;
+	}
+	getVintageStoryFaceTextureCode(face) {
+		let texture = face?.texture;
+		if (typeof texture !== 'string') return null;
+		return texture.startsWith('#') ? texture.substring(1) : texture;
+	}
+	getVintageStoryFaceTextureSize(face, default_texture_size, texture_sizes) {
+		let code = this.getVintageStoryFaceTextureCode(face);
+		if (code && Array.isArray(texture_sizes?.[code])) {
+			return texture_sizes[code];
+		}
+		return default_texture_size;
+	}
 	getUVArray(face, texture_size) {
 		let uv = Array.isArray(face?.uv) ? face.uv : [0, 0, texture_size[0], texture_size[1]];
 		var arr = [
@@ -277,7 +301,7 @@ export class refModel {
 		}
 		return arr;
 	}
-	applyFaceUVs(mesh, faces, texture_size) {
+	applyFaceUVs(mesh, faces, texture_size, texture_sizes = {}) {
 		if (!faces) return;
 		for (var face in faces) {
 			if (faces.hasOwnProperty(face) && faces[face]?.uv !== undefined && faces[face]?.enabled !== false) {
@@ -290,7 +314,8 @@ export class refModel {
 					case 'up':	  fIndex = 4;	break;
 					case 'down':	fIndex = 6;	break;
 				}
-				let uv_array = this.getUVArray(faces[face], texture_size);
+				let face_texture_size = this.getVintageStoryFaceTextureSize(faces[face], texture_size, texture_sizes);
+				let uv_array = this.getUVArray(faces[face], face_texture_size);
 				mesh.geometry.attributes.uv.array.set(uv_array[0], fIndex*4 + 0);  //0,1
 				mesh.geometry.attributes.uv.array.set(uv_array[1], fIndex*4 + 2);  //1,1
 				mesh.geometry.attributes.uv.array.set(uv_array[2], fIndex*4 + 4);  //0,0
@@ -302,9 +327,9 @@ export class refModel {
 	buildVintageStoryShapeModel(options) {
 		let shape = options.vintage_story_shape;
 		let texture_size = options.texture_size || [shape.textureWidth || 16, shape.textureHeight || 16];
-		let mat = this.getMaterial(options);
 		let scope = this;
-		this.material = mat;
+		let material_cache = {};
+		this.material = this.getMaterial(options);
 
 		function vector(value, fallback = [0, 0, 0]) {
 			return Array.isArray(value) ? value : fallback;
@@ -312,8 +337,29 @@ export class refModel {
 		function number(value, fallback = 0) {
 			return typeof value === 'number' && isFinite(value) ? value : fallback;
 		}
+		function getFaceMaterial(face) {
+			if (!face || face.enabled === false) return scope.getTransparentMaterial();
+			let code = scope.getVintageStoryFaceTextureCode(face);
+			if (code === 'null') return scope.getTransparentMaterial();
+			let texture_url = code ? options.texture_urls?.[code] : options.texture;
+			let cache_key = texture_url || `neutral:${code || 'default'}`;
+			if (!material_cache[cache_key]) {
+				material_cache[cache_key] = scope.getMaterial({
+					texture: texture_url,
+					material_color: options.material_color
+				});
+			}
+			return material_cache[cache_key];
+		}
+		function getElementMaterials(faces) {
+			// Modified for Vintage Bench on 2026-06-22: Three BoxGeometry material groups are +X, -X, +Y, -Y, +Z, -Z.
+			return ['east', 'west', 'up', 'down', 'south', 'north'].map(face => getFaceMaterial(faces?.[face]));
+		}
 		function buildElement(element, parent) {
 			let origin = vector(element.rotationOrigin);
+			let from = vector(element.from);
+			let to = vector(element.to);
+			let size = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
 			let group = new THREE.Object3D();
 			group.name = element.name || '';
 			group.position.set(origin[0], origin[1], origin[2]);
@@ -328,26 +374,24 @@ export class refModel {
 				number(element.scaleZ, 1)
 			);
 
-			let from = vector(element.from);
-			let to = vector(element.to);
-			let size = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
+			let anchor = new THREE.Object3D();
+			anchor.name = `${element.name || 'element'}_children`;
+			// Modified for Vintage Bench on 2026-06-22: Vintage Story child elements inherit the parent element's from-minus-origin transform.
+			anchor.position.set(from[0] - origin[0], from[1] - origin[1], from[2] - origin[2]);
+			group.add(anchor);
+
 			let has_faces = element.faces && Object.keys(element.faces).some(face => element.faces[face]?.enabled !== false);
 			if (has_faces && size.some(axis => Math.abs(axis) > 0.0001)) {
 				let geometry = new THREE.BoxGeometry(Math.abs(size[0]), Math.abs(size[1]), Math.abs(size[2]));
-				let mesh = new THREE.Mesh(geometry, mat);
-				let center = [
-					(from[0] + to[0]) / 2,
-					(from[1] + to[1]) / 2,
-					(from[2] + to[2]) / 2
-				];
-				mesh.geometry.translate(center[0] - origin[0], center[1] - origin[1], center[2] - origin[2]);
+				let mesh = new THREE.Mesh(geometry, getElementMaterials(element.faces));
+				mesh.position.set(size[0] / 2, size[1] / 2, size[2] / 2);
 				mesh.name = element.name || '';
-				scope.applyFaceUVs(mesh, element.faces, texture_size);
-				group.add(mesh);
+				scope.applyFaceUVs(mesh, element.faces, texture_size, options.texture_sizes);
+				anchor.add(mesh);
 			}
 
 			if (Array.isArray(element.children)) {
-				element.children.forEach(child => buildElement(child, group));
+				element.children.forEach(child => buildElement(child, anchor));
 			}
 			parent.add(group);
 		}

@@ -25,6 +25,10 @@ let warned_missing_assets = false;
 let warned_asset_load_issues = new Set();
 let loaded_preview_asset_cache = new Map();
 
+function addWarning(warnings, message) {
+	if (warnings && !warnings.includes(message)) warnings.push(message);
+}
+
 export function getVintageStoryAssetRoot() {
 	return settings?.vintage_story_assets_path?.value || '';
 }
@@ -122,7 +126,7 @@ function resolveShapeFile(root, asset, asset_object, source_path, warnings) {
 	let base = resolvePlaceholders(descriptor?.base || descriptor, asset, asset_object);
 	let shape_path = resolveAssetBasePath(root, getAssetDomain(source_path), 'shapes', base, ['.json']);
 	if (!shape_path) {
-		warnings.push(`Could not resolve Vintage Story preview shape for ${asset.label}.`);
+		addWarning(warnings, `Could not resolve Vintage Story preview shape for ${asset.label}.`);
 		return null;
 	}
 	return {
@@ -138,8 +142,36 @@ function normalizeTextureEntry(entry) {
 	return null;
 }
 
-function mergeTextureMaps(asset_object, shape) {
-	return Object.assign({}, asset_object?.textures || {}, chooseByTypeEntry(asset_object?.texturesByType) || {}, shape?.textures || {});
+function getTextureEntryCandidates(asset_object, shape, source_path, shape_path, code) {
+	let candidates = [];
+	let shape_textures = shape?.textures || {};
+	let asset_type_textures = chooseByTypeEntry(asset_object?.texturesByType) || {};
+	let asset_textures = asset_object?.textures || {};
+	if (shape_textures && Object.prototype.hasOwnProperty.call(shape_textures, code)) {
+		candidates.push({entry: shape_textures[code], source_path: shape_path});
+	}
+	if (asset_type_textures && Object.prototype.hasOwnProperty.call(asset_type_textures, code)) {
+		candidates.push({entry: asset_type_textures[code], source_path});
+	}
+	if (asset_textures && Object.prototype.hasOwnProperty.call(asset_textures, code)) {
+		candidates.push({entry: asset_textures[code], source_path});
+	}
+	return candidates;
+}
+
+function collectUsedFaceTextureRefs(elements, used_refs = new Set()) {
+	if (!Array.isArray(elements)) return used_refs;
+	for (let element of elements) {
+		let faces = element?.faces || {};
+		for (let face_name of ['north', 'east', 'south', 'west', 'up', 'down']) {
+			let texture = faces[face_name]?.texture;
+			if (typeof texture === 'string' && texture !== '#null' && texture !== 'null') {
+				used_refs.add(texture);
+			}
+		}
+		collectUsedFaceTextureRefs(element?.children, used_refs);
+	}
+	return used_refs;
 }
 
 function findFirstFaceTexture(elements) {
@@ -156,21 +188,41 @@ function findFirstFaceTexture(elements) {
 	return null;
 }
 
-function resolveTextureFile(root, asset, asset_object, shape, source_path, warnings) {
-	let texture_map = mergeTextureMaps(asset_object, shape);
-	let texture_ref = findFirstFaceTexture(shape?.elements);
-	let texture_base = texture_ref;
-	if (texture_ref?.startsWith('#')) {
-		texture_base = normalizeTextureEntry(texture_map[texture_ref.substring(1)]);
+function resolveTextureFile(root, asset, asset_object, shape, source_path, shape_path, warnings, texture_ref) {
+	if (!texture_ref || texture_ref === '#null' || texture_ref === 'null') return null;
+	let candidates = [];
+	if (texture_ref.startsWith('#')) {
+		let code = texture_ref.substring(1);
+		candidates = getTextureEntryCandidates(asset_object, shape, source_path, shape_path, code);
 	} else {
-		texture_base = normalizeTextureEntry(texture_ref);
+		candidates = [{entry: texture_ref, source_path: shape_path || source_path}];
 	}
-	texture_base = resolvePlaceholders(texture_base, asset, asset_object);
-	let texture_path = resolveAssetBasePath(root, getAssetDomain(source_path), 'textures', texture_base, ['.png', '.jpg']);
-	if (!texture_path && texture_ref) {
-		warnings.push(`Could not resolve Vintage Story preview texture "${texture_ref}" for ${asset.label}; using a neutral preview material.`);
+	for (let candidate of candidates) {
+		let texture_base = resolvePlaceholders(normalizeTextureEntry(candidate.entry), asset, asset_object);
+		let texture_path = resolveAssetBasePath(root, getAssetDomain(candidate.source_path || source_path), 'textures', texture_base, ['.png', '.jpg']);
+		if (texture_path) return texture_path;
 	}
-	return texture_path;
+	if (texture_ref.startsWith('#') && !candidates.length) {
+		addWarning(warnings, `Could not find Vintage Story preview texture key "${texture_ref}" for ${asset.label}; using a neutral preview material.`);
+	} else if (texture_ref) {
+		addWarning(warnings, `Could not resolve Vintage Story preview texture "${texture_ref}" for ${asset.label}; using a neutral preview material.`);
+	}
+	return null;
+}
+
+function resolveTextureFiles(root, asset, asset_object, shape, source_path, shape_path, warnings) {
+	let used_refs = collectUsedFaceTextureRefs(shape?.elements);
+	let texture_paths = {};
+	let texture_urls = {};
+	used_refs.forEach(texture_ref => {
+		let code = texture_ref.startsWith('#') ? texture_ref.substring(1) : texture_ref;
+		let texture_path = resolveTextureFile(root, asset, asset_object, shape, source_path, shape_path, warnings, texture_ref);
+		if (texture_path) {
+			texture_paths[code] = texture_path;
+			texture_urls[code] = pathToFileUrl(texture_path);
+		}
+	});
+	return {texture_paths, texture_urls};
 }
 
 export function loadVintageStoryPreviewModel(asset_id) {
@@ -199,21 +251,26 @@ export function loadVintageStoryPreviewModel(asset_id) {
 			loaded_preview_asset_cache.set(cache_key, result);
 			return result;
 		}
-		let texture_path = resolveTextureFile(root, asset, asset_object, resolved_shape.shape, source_path, warnings);
+		let first_texture_ref = findFirstFaceTexture(resolved_shape.shape?.elements);
+		let texture_path = resolveTextureFile(root, asset, asset_object, resolved_shape.shape, source_path, resolved_shape.shape_path, warnings, first_texture_ref);
+		let texture_files = resolveTextureFiles(root, asset, asset_object, resolved_shape.shape, source_path, resolved_shape.shape_path, warnings);
 		let result = {
 			asset_id,
 			source_path,
 			shape_path: resolved_shape.shape_path,
 			texture_path,
+			texture_paths: texture_files.texture_paths,
 			warnings,
 			model: {
 				name: asset.label,
 				vintage_story_shape: resolved_shape.shape,
 				texture: texture_path ? pathToFileUrl(texture_path) : null,
+				texture_urls: texture_files.texture_urls,
 				texture_size: [
 					resolved_shape.shape.textureWidth || 16,
 					resolved_shape.shape.textureHeight || 16
 				],
+				texture_sizes: resolved_shape.shape.textureSizes || {},
 				material_color: 0x6e675a
 			}
 		};

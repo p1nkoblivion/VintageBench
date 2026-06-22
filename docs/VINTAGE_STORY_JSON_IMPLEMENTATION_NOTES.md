@@ -169,7 +169,7 @@ For this pass:
 - Elements: `name`, `from`, `to`, `shade`, `rotationOrigin`, `rotationX`, `rotationY`, `rotationZ`, `faces`, `children`.
 - Faces: `texture`, `uv`, `rotation`, `enabled`.
 - Textures: texture code, logical Vintage Story texture path, per-texture UV size through `textureSizes`.
-- Hierarchy: recursive Vintage Story `children` map to outliner groups/cubes. Zero-size parent elements with children and no enabled faces import as groups. Vintage Story elements that have both geometry and children import as a group with a marked self-geometry cube; export folds that pair back into one Vintage Story element.
+- Hierarchy: recursive Vintage Story `children` map to the editable outliner hierarchy. Zero-size parent elements with children and no enabled faces import as internal parent nodes. Vintage Story elements that have both geometry and children currently import as an internal parent node with a marked self-geometry cuboid; export folds that pair back into one Vintage Story element so Blockbench-specific helper structure is not written to JSON.
 
 ## Preserved but not editable yet
 
@@ -184,9 +184,9 @@ For this pass:
 - Animation editing is not implemented. Imported animation JSON is preserved and re-emitted only as raw JSON.
 - Attachment point and locator editing is not implemented. Imported attachment point JSON is preserved on the owning element.
 - Non-cube/non-group outliner nodes are warned and skipped during Vintage Story export.
-- Elements with both geometry and children are represented with an extra self-geometry cube in the outliner because Blockbench cubes cannot directly parent children.
-- Complex nested rotation/scale validation against the actual game remains TODO.
-- Texture asset path resolution is not implemented beyond placeholder references; logical Vintage Story paths are preserved.
+- Elements with both geometry and children still need a native Vintage Bench parent-cuboid editing model. The current editable outliner uses an internal helper parent plus self-geometry cuboid because the inherited editor architecture only gives true child containers to group-like nodes. This must remain hidden from exported Vintage Story JSON.
+- Complex nested rotation/scale validation against the actual game remains TODO for editable imports. Display preview reference shapes now use the VSMC2-style parent-child transform sequence for local game assets.
+- Texture asset path resolution for editable model import is not implemented beyond placeholder references; logical Vintage Story paths are preserved. Display preview reference shapes resolve local face textures from the shape/asset texture maps.
 
 ## Test fixtures and manual checks
 

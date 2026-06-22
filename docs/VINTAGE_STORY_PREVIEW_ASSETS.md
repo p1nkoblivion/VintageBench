@@ -42,13 +42,16 @@ This pass centralizes:
 - Vintage Story display context metadata in `js/display_mode/vintage_story_display_transforms.js`.
 - Local Vintage Story shape-to-preview conversion in `js/display_mode/display_mode.js`.
 
-When a configured local asset resolves successfully, Vintage Bench builds a preview reference model from the resolved Vintage Story shape elements. Blocktype, itemtype, and entity files that point at a `shape.base` or `client.shape.base` are resolved into the matching `assets/<domain>/shapes/**/*.json` file. Texture references are resolved through the loaded asset/shape texture maps into `assets/<domain>/textures/**/*.png` or `.jpg` when possible.
+When a configured local asset resolves successfully, Vintage Bench builds a preview reference model from the resolved Vintage Story shape elements. Blocktype, itemtype, and entity files that point at a `shape.base` or `client.shape.base` are resolved into the matching `assets/<domain>/shapes/**/*.json` file.
+
+Modified for Vintage Bench on 2026-06-22: preview texture lookup now follows the loaded shape data per face. Face values such as `#forge` and `#coal-dust` resolve through the shape's top-level `textures` map first, then fall back to texture maps supplied by the owning block/item/entity JSON. Shape-local texture paths resolve relative to the shape file's asset domain, so a shape at `assets/survival/shapes/block/stone/forge/forge.json` can correctly resolve `block/stone/forge/forge` and `block/stone/forge/coal-dust` under `assets/survival/textures/`.
+
+Modified for Vintage Bench on 2026-06-22: preview shape conversion follows Vintage Story parent-child transform order. Each element applies `rotationOrigin`, rotation, scale, then `from - rotationOrigin`; child elements are parented below that translated anchor instead of being flattened as Blockbench-style sibling groups.
 
 Missing local assets, unresolved shapes, or unresolved textures do not crash the Display editor. The UI continues to open with placeholders or neutral materials and shows a short warning for the first issue encountered.
 
 Current limitations:
 
-- The preview converter uses the first resolvable texture for a reference shape. Multi-texture preview material assignment is still approximate.
 - Shape variants are resolved with safe defaults such as `generic`, `complete`, `normal`, `wood`, `aged`, `square`, and firepit `extinct`; full Vintage Story variant/material resolution is not implemented yet.
 - Animation poses, attachment point behavior, overlay textures, and runtime renderer-specific effects are not previewed yet.
 - GUI preview dimensions still need pixel calibration against in-game rendering.
@@ -57,5 +60,5 @@ Current limitations:
 
 - Add richer missing/unresolved asset warnings directly inside the Display panel.
 - Add a developer-only cache folder for locally converted preview assets and keep it out of git.
-- Add full multi-texture material assignment for reference shapes.
+- Add support for overlay texture composition and runtime renderer-specific material effects where the game uses more than plain face textures.
 - Source exact vanilla default transform presets from live game/API behavior.
