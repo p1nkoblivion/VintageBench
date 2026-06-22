@@ -3,33 +3,33 @@
 		<div class="toolbar_wrapper display"></div>
 		<p class="panel_toolbar_label">{{ tl('display.slot') }}</p>
 		<div id="display_bar" class="bar tabs_small icon_bar">
-			<input class="hidden" type="radio" name="display" id="thirdperson_righthand" checked>
+			<input class="hidden" type="radio" name="display" id="thirdperson_righthand" checked />
 			<label class="tool" for="thirdperson_righthand" onclick="DisplayMode.loadThirdRight()"><div class="tooltip">{{ tl('display.slot.third_right') }}</div><i class="material-icons">accessibility</i></label>
-			<input class="hidden" type="radio" name="display" id="thirdperson_lefthand">
+			<input class="hidden" type="radio" name="display" id="thirdperson_lefthand" />
 			<label class="tool" for="thirdperson_lefthand" onclick="DisplayMode.loadThirdLeft()"><div class="tooltip">{{ tl('display.slot.third_left') }}</div><i class="material-icons">accessibility</i></label>
 
-			<input class="hidden" type="radio" name="display" id="firstperson_righthand">
+			<input class="hidden" type="radio" name="display" id="firstperson_righthand" />
 			<label class="tool" for="firstperson_righthand" onclick="DisplayMode.loadFirstRight()"><div class="tooltip">{{ tl('display.slot.first_right') }}</div><i class="material-icons">person</i></label>
-			<input class="hidden" type="radio" name="display" id="firstperson_lefthand">
+			<input class="hidden" type="radio" name="display" id="firstperson_lefthand" />
 			<label class="tool" for="firstperson_lefthand" onclick="DisplayMode.loadFirstLeft()"><div class="tooltip">{{ tl('display.slot.first_left') }}</div><i class="material-icons">person</i></label>
 
-			<input class="hidden" type="radio" name="display" id="head">
+			<input class="hidden" type="radio" name="display" id="head" />
 			<label class="tool" for="head" onclick="DisplayMode.loadHead()"><div class="tooltip">{{ tl('display.slot.head') }}</div><i class="material-icons">sentiment_satisfied</i></label>
 
-			<input class="hidden" type="radio" name="display" id="ground">
+			<input class="hidden" type="radio" name="display" id="ground" />
 			<label class="tool" for="ground" onclick="DisplayMode.loadGround()"><div class="tooltip">{{ tl('display.slot.ground') }}</div><i class="icon-ground"></i></label>
 
 			<template v-if="isBedrockStyle()">
-				<input class="hidden" type="radio" name="display" id="embedded">
+				<input class="hidden" type="radio" name="display" id="embedded" />
 				<label class="tool" for="embedded" onclick="DisplayMode.loadEmbedded()"><div class="tooltip">{{ tl('display.slot.embedded') }}</div><i class="material-icons">potted_plant</i></label>
 			</template>
 
 			<template v-if="!isBedrockStyle()">
-				<input class="hidden" type="radio" name="display" id="on_shelf">
+				<input class="hidden" type="radio" name="display" id="on_shelf" />
 				<label class="tool" for="on_shelf" onclick="DisplayMode.loadShelf()"><div class="tooltip">{{ tl('display.slot.on_shelf') }}</div><i class="material-icons">table_view</i></label>
 			</template>
 
-			<input class="hidden" type="radio" name="display" id="gui">
+			<input class="hidden" type="radio" name="display" id="gui" />
 			<label class="tool" for="gui" onclick="DisplayMode.loadGUI()"><div class="tooltip">{{ tl('display.slot.gui') }}</div><i class="material-icons">border_style</i></label>
 		</div>
 		<p class="panel_toolbar_label">{{ tl('display.reference') }}</p>
@@ -45,7 +45,7 @@
 			<div class="bar slider_input_combo" v-for="axis in axes" :key="'rotation.'+axis" :title="getAxisLetter(axis).toUpperCase()">
 				<input type="range" :style="{'--color-thumb': `var(--color-axis-${getAxisLetter(axis)})`}" class="tool disp_range" v-model.number="slot.rotation[axis]" v-bind:trigger_type="'rotation.'+axis"
 					min="-180" max="180" step="1" value="0"
-					@input="change(axis, 'rotation')" @mousedown="start()" @change="save">
+					@input="change(axis, 'rotation')" @mousedown="start()" @change="save" />
 				<numeric-input class="tool disp_text" v-model.number="slot.rotation[axis]" :min="-180" :max="180" :step="0.5" @input="change(axis, 'rotation')" @change="focusout(axis, 'rotation');save()" @mousedown="start()" />
 			</div>
 			
@@ -58,7 +58,7 @@
 					v-bind:min="Math.abs(slot.translation[axis]) < 10 ? -20 : (slot.translation[axis] > 0 ? -70*3+10 : -80)"
 					v-bind:max="Math.abs(slot.translation[axis]) < 10 ?  20 : (slot.translation[axis] < 0 ? 70*3-10 : 80)"
 					v-bind:step="Math.abs(slot.translation[axis]) < 10 ? 0.25 : 1"
-					value="0" @input="change(axis, 'translation')" @mousedown="start()" @change="save">
+					value="0" @input="change(axis, 'translation')" @mousedown="start()" @change="save" />
 				<numeric-input class="tool disp_text" v-model.number="slot.translation[axis]" :min="-80" :max="80" :step="0.5" @input="change(axis, 'translation');" @change="focusout(axis, 'translation');save()" @mousedown="start()" />
 			</div>
 
@@ -76,11 +76,11 @@
 					v-bind:min="slot.scale[axis] > 1 ? -2 : 0"
 					v-bind:max="slot.scale[axis] > 1 ? 4 : 2"
 					step="0.01"
-					value="0" @input="change(axis, 'scale')" @mousedown="start(axis, 'scale')" @change="save(axis, 'scale')">
+					value="0" @input="change(axis, 'scale')" @mousedown="start(axis, 'scale')" @change="save(axis, 'scale')" />
 				<numeric-input class="tool disp_text" v-model.number="slot.scale[axis]" :min="0" :max="4" :step="0.01" @input="change(axis, 'scale')" @change="focusout(axis, 'scale');save()" @mousedown="start()" />
 			</div>
 			<div class="bar" v-if="isBedrockStyle() && slot.slot_id == 'gui'" @click="toggleFitToFrame()">
-				<input type="checkbox" :checked="slot.fit_to_frame == true">
+				<input type="checkbox" :checked="slot.fit_to_frame == true" />
 				<label style="padding-top: 3px;">Fit to Frame</label>
 			</div>
 			
@@ -90,7 +90,7 @@
 				</div>
 				<div class="bar slider_input_combo">
 					<input type="range" class="tool disp_range" v-model.number="pose_angle"
-						min="-180" max="180" step="1" >
+						min="-180" max="180" step="1" />
 					<numeric-input class="tool disp_text" v-model.number="pose_angle" :min="-180" :max="180" :step="0.5" />
 				</div>
 			</template>
@@ -100,7 +100,7 @@
 					<p class="panel_toolbar_label">{{ tl('display.animate_preview') }}</p>
 				</div>
 				<div class="bar slider_input_combo">
-					<input type="checkbox" v-model.number="animate_preview" >
+					<input type="checkbox" v-model.number="animate_preview" />
 				</div>
 			</template>
 			

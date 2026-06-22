@@ -5,7 +5,7 @@ import commandLineArgs from 'command-line-args'
 import path from 'path';
 import { writeFileSync } from 'fs';
 import fs from 'node:fs';
-import vuePlugin from 'esbuild-vue/src/index.js';
+import { compileStyle, compileTemplate, parseComponent } from '@vue/compiler-sfc';
 const require = createRequire(import.meta.url);
 const pkg = require("./package.json");
 
@@ -62,6 +62,80 @@ function createJsonPlugin(ext_suffix, namespace) {
         }
     };
 };
+// Modified for Vintage Bench on 2026-06-22: replace esbuild-vue to remove vulnerable Vue 2 template-compiler dependencies.
+function createVueSfcPlugin() {
+    return {
+        name: 'vintage-bench-vue-sfc-plugin',
+        setup(build) {
+            build.onLoad({filter: /\.vue$/}, async (args) => {
+                const source = await fs.promises.readFile(args.path, 'utf8');
+                const descriptor = parseComponent(source, {filename: args.path});
+                if (descriptor.errors?.length) {
+                    throw new Error(descriptor.errors.map(error => error.message || String(error)).join('\n'));
+                }
+
+                const id = `data-v-${Buffer.from(path.relative(import.meta.dirname, args.path)).toString('hex').slice(0, 8)}`;
+                let contents = descriptor.script?.content || 'export default {}';
+                contents = contents.replace(/export\s+default/, 'const __vue_script__ =');
+                if (!contents.includes('const __vue_script__ =')) {
+                    contents += '\nconst __vue_script__ = {};\n';
+                }
+
+                if (descriptor.template) {
+                    const template = compileTemplate({
+                        source: descriptor.template.content,
+                        filename: args.path,
+                        id,
+                        compilerOptions: {
+                            preserveWhitespace: false
+                        }
+                    });
+                    if (template.errors?.length) {
+                        throw new Error(template.errors.map(error => error.message || String(error)).join('\n'));
+                    }
+                    contents += `\n${template.code}\n`;
+                } else {
+                    contents += '\nconst render = undefined;\nconst staticRenderFns = [];\n';
+                }
+
+                let css = '';
+                for (const styleBlock of descriptor.styles || []) {
+                    const style = compileStyle({
+                        source: styleBlock.content,
+                        filename: args.path,
+                        id,
+                        scoped: !!styleBlock.scoped
+                    });
+                    if (style.errors?.length) {
+                        throw new Error(style.errors.map(error => error.message || String(error)).join('\n'));
+                    }
+                    css += style.code + '\n';
+                }
+                if (css) {
+                    contents += `
+const __vue_css__ = ${JSON.stringify(css)};
+if (typeof document !== 'undefined') {
+    const __vue_style__ = document.createElement('style');
+    __vue_style__.textContent = __vue_css__;
+    document.head.appendChild(__vue_style__);
+}
+`;
+                }
+
+                if (descriptor.styles?.some(styleBlock => styleBlock.scoped)) {
+                    contents += `\n__vue_script__._scopeId = ${JSON.stringify(id)};\n`;
+                }
+                contents += '\n__vue_script__.render = render;\n__vue_script__.staticRenderFns = staticRenderFns;\nexport default __vue_script__;\n';
+
+                return {
+                    contents,
+                    loader: 'js',
+                    resolveDir: path.dirname(args.path)
+                };
+            });
+        }
+    };
+};
 
 if (options.target && options.target !== 'electron') {
     throw new Error('Vintage Bench only supports the desktop Electron build target in this cleanup pass.');
@@ -114,7 +188,7 @@ const config = {
             file: 'desktop.js'
         }),
         createJsonPlugin('.bbkeymap', 'bbkeymap'),
-        vuePlugin(),
+        createVueSfcPlugin(),
         glsl({
             minify
         })
