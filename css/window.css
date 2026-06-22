@@ -296,13 +296,18 @@
 		vertical-align: top;
 		margin-top: -0.6px;
 	}
-	div#corner_logo img {
-		margin-top: 4px;
-		width: 134px;
+	/* Modified for Vintage Bench on 2026-06-22: replaced the original Blockbench text-logo image with fork branding. */
+	div#corner_logo .vintage_bench_logo {
+		display: inline-flex;
+		align-items: center;
+		height: 100%;
+		font-size: 18px;
+		line-height: var(--menu-bar-height);
+		color: var(--color-light);
 	}
 	@media (max-width:950px)  {
 		div#corner_logo {
-			width: 36px;
+			width: 128px;
 			overflow: hidden;
 		}
 	}
@@ -1287,4 +1292,3 @@
 		color: var(--color-light);
 	}
 }
-

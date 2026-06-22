@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-	<title>Blockbench</title>
+	<!-- Modified for Vintage Bench on 2026-06-22: renamed the fork's default browser/window title. -->
+	<title>Vintage Bench</title>
 	<meta charset="utf-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<meta name="theme-color" content="#121418">
@@ -50,7 +51,7 @@
 		}
 		window.factoryResetAndReload = function() {
 			let lang_key = 'menu.help.developer.reset_storage.confirm';
-			let result = window.confirm((window.tl && tl(lang_key) != lang_key) ? tl(lang_key) : 'Are you sure you want to reset Blockbench to factory settings? This will delete all custom settings, keybindings and installed plugins.');
+			let result = window.confirm((window.tl && tl(lang_key) != lang_key) ? tl(lang_key) : 'Are you sure you want to reset Vintage Bench to factory settings? This will delete all custom settings, keybindings and installed plugins.');
 			if (result) {
 				localStorage.clear();
 				if ('Blockbench' in window) Blockbench.addFlag('no_localstorage_saving');
@@ -60,7 +61,7 @@
 		}
 	</script>
 	<div id="loading_error_message" style="display: none;">
-		<div>An error occurred while loading Blockbench</div>
+		<div>An error occurred while loading Vintage Bench</div>
 		<div id="loading_error_detail" style="color: var(--color-subtle_text);"></div>
 		<button onclick="window.Blockbench ? window.Blockbench.reload() : window.location.reload(true)" class="large" style="margin-right: auto; margin-left: auto;">Reload</button>
 		<button onclick="factoryResetAndReload()" class="large" style="margin-right: auto; margin-left: auto;">Factory Reset</button>
@@ -75,7 +76,8 @@
 	<header>
 		<ul id="mac_window_menu" hidden></ul>
 		<div id="corner_logo" class="app-drag-region">
-			<img class="blockbench_logo" src="assets/logo_text_white.svg" alt="Blockbench" />
+			<!-- Modified for Vintage Bench on 2026-06-22: replaced the original Blockbench text logo with fork branding. -->
+			<span class="vintage_bench_logo">Vintage Bench</span>
 		</div>
 		<ul id="menu_bar" class="scroll_horizontal"></ul>
 		<div id="title_bar_home_button" class="tool hidden" onclick="Interface.tab_bar.openNewTab()"><i class="material-icons icon">home</i></div>

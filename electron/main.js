@@ -16,6 +16,9 @@ let all_wins = [];
 let orig_win;
 let load_project_data;
 
+// Modified for Vintage Bench on 2026-06-22: set the native application name for the fork.
+app.setName('Vintage Bench');
+
 (() => {
 	// Allow advanced users to specify a custom userData directory.
 	// Useful for portable installations, and for setting up development environments.
@@ -92,7 +95,8 @@ function createWindow(second_instance, options = {}) {
 
 		let template = [
 			{
-				"label": "Blockbench",
+				// Modified for Vintage Bench on 2026-06-22: renamed the macOS application menu for the fork.
+				"label": "Vintage Bench",
 				"submenu": [
 					{
 						"role": "hide"

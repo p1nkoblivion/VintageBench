@@ -391,7 +391,8 @@ export function resizeWindow(event) {
 }
 
 export function setProjectTitle(title) {
-	let window_title = 'Blockbench';
+	// Modified for Vintage Bench on 2026-06-22: default the empty workspace title to the fork identity.
+	let window_title = 'Vintage Bench: A fork of Blockbench made for Vintage Story';
 	if (title == undefined && Project.name) {
 		title = Project.name
 	}
@@ -405,7 +406,7 @@ export function setProjectTitle(title) {
 				title = title.replace(/^geometry\./,'').replace(/:[a-z0-9.]+/, '')
 			}
 		}
-		window_title = title+' - Blockbench';
+		window_title = title+' - Vintage Bench';
 	} else {
 		Prop.file_name = Prop.file_name_alt = ''
 	}
