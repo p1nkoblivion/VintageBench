@@ -620,37 +620,9 @@ onVueSetup(async function() {
 			}).$mount(section);
 		}
 	})
-	Promise.all([news_call, documentReady]).then((data) => {
-		if (!data || !data[0]) return;
-		data = data[0];
-
-		//Update Screen
-		if (Blockbench.hasFlag('after_update') && data.new_version) {
-			data.new_version.insert_after = 'splash_screen'
-			addStartScreenSection('new_version', data.new_version);
-			jQuery.ajax({
-				url: 'https://blckbn.ch/api/event/successful_update',
-				type: 'POST',
-				data: {
-					version: Blockbench.version
-				}
-			})
-		}
-		if (data.psa) {
-			(function() {
-				if (typeof data.psa.version == 'string') {
-					if (data.psa.version.includes('-')) {
-						limits = data.psa.version.split('-');
-						if (limits[0] && VersionUtil.compare(Blockbench.version, '<', limits[0])) return;
-						if (limits[1] && VersionUtil.compare(Blockbench.version, '>', limits[1])) return;
-					} else {
-						if (data.psa.version != Blockbench.version) return;
-					}
-				}
-				addStartScreenSection('psa', data.psa);
-			})()
-		}
-
+	documentReady.then(() => {
+		// TODO(Vintage Story): Add local Vintage Bench release notes or migration notices
+		// without relying on Blockbench web news/update infrastructure.
 	})
 })()
 
