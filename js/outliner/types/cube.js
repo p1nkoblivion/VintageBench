@@ -1671,6 +1671,10 @@ BARS.defineActions(function() {
 			}
 			if (Format.bone_rig) {
 				var pos1 = group ? group.origin.slice() : [0, 0, 0];
+				if (!group && Format.id === 'free') {
+					// Modified for Vintage Bench on 2026-06-22: root cuboids should spawn centered inside the Vintage Story 0..16 grid.
+					pos1 = [8, 0, 8];
+				}
 				let size = Settings.get('default_cube_size');
 				if (size % 2 == 0) {
 					base_cube.extend({

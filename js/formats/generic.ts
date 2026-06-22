@@ -13,7 +13,8 @@ new ModelFormat('free', {
 	},
 	rotate_cubes: true,
 	bone_rig: true,
-	centered_grid: true,
+	// Modified for Vintage Bench on 2026-06-22: Vintage Story shape coordinates use a 0..16 corner-origin grid.
+	centered_grid: false,
 	optional_box_uv: true,
 	per_texture_uv_size: true,
 	per_texture_wrap_mode: true,

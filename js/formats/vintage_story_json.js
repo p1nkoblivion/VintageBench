@@ -558,9 +558,10 @@ function setupDefaultVintageStoryTexture() {
 function setupStarterVintageStoryCube(texture) {
 	let cube = new Cube({
 		name: 'Cube',
-		from: [0, 0, 0],
-		to: [1, 1, 1],
-		origin: [0, 0, 0],
+		// Modified for Vintage Bench on 2026-06-22: place the starter cuboid in the center of the Vintage Story 0..16 grid.
+		from: [7.5, 0, 7.5],
+		to: [8.5, 1, 8.5],
+		origin: [8, 0, 8],
 		shade: true
 	}).addTo('root').init();
 	VS_FACE_DIRECTIONS.forEach(direction => {

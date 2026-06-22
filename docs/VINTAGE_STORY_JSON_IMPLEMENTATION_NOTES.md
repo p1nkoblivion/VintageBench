@@ -163,6 +163,7 @@ For this pass:
 - `js/io/io.js` saves through the active format codec, so main Save writes Vintage Story JSON to `.json`.
 - `js/io/project.ts`, `js/outliner/types/cube.js`, `js/outliner/types/group.js`, and `js/texturing/textures.js` now have hidden `vintage_story`/`vintage_story_data` properties for raw-field preservation.
 - Modified for Vintage Bench on 2026-06-22: cuboids in the Vintage Story format can now act as outliner parents. Imported Vintage Story elements with `children` stay as cuboid elements instead of being split into a group plus generated geometry child.
+- Modified for Vintage Bench on 2026-06-22: the Vintage Story format uses the inherited corner-origin grid mode so X/Z axes sit at the 0,0 top-left corner of the 0..16 shape plane when facing north.
 
 ## Supported fields in this pass
 
@@ -171,6 +172,7 @@ For this pass:
 - Faces: `texture`, `uv`, `rotation`, `enabled`.
 - Textures: texture code, logical Vintage Story texture path, per-texture UV size through `textureSizes`.
 - Hierarchy: recursive Vintage Story `children` map to parent-capable cuboids in the editable outliner. Zero-size parent elements import as cuboids with disabled faces and children. Vintage Story elements that have both geometry and children import as a single parent cuboid with child cuboids underneath it.
+- Editor grid: Vintage Story projects use a 0..16 corner-origin X/Z grid. Imported 0..16 shapes are visually centered in the grid, while the root Add Cube and new-project starter cube place new cuboids around X/Z center `[8, 8]`.
 
 ## Preserved but not editable yet
 
