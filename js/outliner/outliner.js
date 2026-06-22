@@ -295,8 +295,14 @@ export class NodePreviewController extends EventSystem {
 
 		if (Format.bone_rig) {
 			if (element.parent instanceof OutlinerNode && element.parent.getTypeBehavior('parent')) {
-				element.parent.mesh.add(mesh);
-				if (element.parent.getTypeBehavior('use_absolute_position')) {
+				// Modified for Vintage Bench on 2026-06-22: Vintage Story cuboid children inherit the parent element's from-minus-origin anchor.
+				let parent_object = element.parent.mesh;
+				let parent_is_vintage_story_cube = Format.id === 'free' && element.parent.type === 'cube' && element.parent.mesh?.vintage_story_child_anchor;
+				if (parent_is_vintage_story_cube) {
+					parent_object = element.parent.mesh.vintage_story_child_anchor;
+				}
+				parent_object.add(mesh);
+				if (!parent_is_vintage_story_cube && element.parent.getTypeBehavior('use_absolute_position')) {
 					mesh.position.x -= element.parent.origin[0];
 					mesh.position.y -= element.parent.origin[1];
 					mesh.position.z -= element.parent.origin[2];

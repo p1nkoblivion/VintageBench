@@ -69,13 +69,6 @@ function roundedArray(value, length, fallback = 0) {
 	return numberArray(value, length, fallback).map(roundedNumber);
 }
 
-function vectorsEqual(a, b) {
-	return Array.isArray(a) && Array.isArray(b) && a.length >= 3 && b.length >= 3
-		&& numberOrDefault(a[0]) === numberOrDefault(b[0])
-		&& numberOrDefault(a[1]) === numberOrDefault(b[1])
-		&& numberOrDefault(a[2]) === numberOrDefault(b[2]);
-}
-
 function addWarning(warnings, message) {
 	if (warnings && !warnings.includes(message)) warnings.push(message);
 }
@@ -242,27 +235,6 @@ function collectTextures(model, warnings) {
 	return texture_map;
 }
 
-function faceHasRenderableData(face) {
-	return isPlainObject(face) && face.enabled !== false;
-}
-
-function elementHasChildren(element) {
-	return Array.isArray(element.children) && element.children.length > 0;
-}
-
-function elementHasRenderableGeometry(element) {
-	let faces = isPlainObject(element.faces) ? element.faces : {};
-	let has_any_face = Object.keys(faces).length > 0;
-	let has_enabled_face = Object.keys(faces).some(direction => faceHasRenderableData(faces[direction]));
-	return !vectorsEqual(element.from, element.to) || has_any_face || has_enabled_face;
-}
-
-function shouldImportElementAsGroup(element) {
-	let faces = isPlainObject(element.faces) ? element.faces : {};
-	let has_enabled_face = Object.keys(faces).some(direction => faceHasRenderableData(faces[direction]));
-	return vectorsEqual(element.from, element.to) && !has_enabled_face && Array.isArray(element.children) && element.children.length > 0;
-}
-
 function applyFaceToCube(cube, direction, face_data, texture_map, warnings) {
 	let face = cube.faces[direction];
 	face.enabled = true;
@@ -305,7 +277,7 @@ function createCubeFromVintageStoryElement(element, parent, texture_map, warning
 		],
 		shade: element.shade !== false,
 		vintage_story: {
-			extra: kind === 'parent_geometry' ? {} : copyUnknownFields(element, VS_ELEMENT_MAPPED_FIELDS),
+			extra: copyUnknownFields(element, VS_ELEMENT_MAPPED_FIELDS),
 			kind
 		}
 	}).addTo(parent || 'root').init();
@@ -333,34 +305,10 @@ function importVintageStoryElement(element, parent, texture_map, warnings) {
 	}
 
 	let name = typeof element.name === 'string' && element.name ? element.name : 'Element';
-	let rotation_origin = Array.isArray(element.rotationOrigin) ? numberArray(element.rotationOrigin, 3, 0) : [0, 0, 0];
-	let rotation = [
-		numberOrDefault(element.rotationX, 0),
-		numberOrDefault(element.rotationY, 0),
-		numberOrDefault(element.rotationZ, 0)
-	];
 	let extra = copyUnknownFields(element, VS_ELEMENT_MAPPED_FIELDS);
-	let node;
 
-	if (shouldImportElementAsGroup(element) || elementHasChildren(element)) {
-		node = new Group({
-			name,
-			origin: rotation_origin,
-			rotation,
-			shade: element.shade !== false,
-			vintage_story: {
-				extra,
-				from: numberArray(element.from, 3, 0),
-				to: numberArray(element.to, 3, 0),
-				kind: 'group'
-			}
-		}).addTo(parent || 'root').init();
-		if (elementHasRenderableGeometry(element)) {
-			createCubeFromVintageStoryElement(element, node, texture_map, warnings, `${name} Geometry`, 'parent_geometry', [0, 0, 0]);
-		}
-	} else {
-		node = createCubeFromVintageStoryElement(element, parent, texture_map, warnings, name, 'cube');
-	}
+	// Modified for Vintage Bench on 2026-06-22: import Vintage Story parent elements as parent-capable cuboids instead of splitting them into groups plus generated geometry children.
+	let node = createCubeFromVintageStoryElement(element, parent, texture_map, warnings, name, 'cube');
 
 	if (hasKeys(extra)) {
 		addWarning(warnings, `Element "${name}" contains preserved fields that are not editable yet.`);

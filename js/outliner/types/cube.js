@@ -148,6 +148,9 @@ export class Cube extends OutlinerElement {
 		this.stretch = [1, 1, 1];
 		this.visibility = true;
 		this.autouv = 0;
+		// Modified for Vintage Bench on 2026-06-22: Vintage Story shape elements can be cuboids with child elements.
+		this.children = [];
+		this.isOpen = false;
 
 		for (var key in Cube.properties) {
 			Cube.properties[key].reset(this);
@@ -262,6 +265,9 @@ export class Cube extends OutlinerElement {
 	markAsSelected(...args) {
 		let was_selected = this.selected;
 		super.markAsSelected(...args);
+		if (args[0] && this.children instanceof Array) {
+			this.children.forEach(child => child.markAsSelected?.(true));
+		}
 		if (!was_selected && Cube.selected[0]) {
 			let other_selected_faces = UVEditor.selected_faces.slice();
 			let own_selected_faces = UVEditor.getSelectedFaces(this, true);
@@ -270,6 +276,23 @@ export class Cube extends OutlinerElement {
 			}
 		}
 		return this;
+	}
+	forEachChild(cb, type, forSelf) {
+		if (forSelf) {
+			cb(this);
+		}
+		if (!(this.children instanceof Array)) return;
+		let i = 0;
+		while (i < this.children.length) {
+			let child = this.children[i];
+			if (!type || (type instanceof Array ? type.find(t2 => child instanceof t2) : child instanceof type)) {
+				cb(child);
+			}
+			if (child.forEachChild) {
+				child.forEachChild(cb, type);
+			}
+			i++;
+		}
 	}
 	size(axis, floored) {
 		var scope = this;
@@ -973,6 +996,7 @@ export class Cube extends OutlinerElement {
 	static behavior = {
 		select_faces: 'enum',
 		cube_faces: true,
+		select_children: 'self_first',
 		support_box_uv: true,
 		rotatable: true,
 		movable: true,
@@ -986,6 +1010,12 @@ export class Cube extends OutlinerElement {
 		unique_name: false,
 	}
 }
+Cube.addBehaviorOverride({
+	condition: {formats: ['free'], features: ['bone_rig']},
+	behavior: {
+		parent: true
+	}
+})
 	Cube.prototype.title = tl('data.cube');
 	Cube.prototype.type = 'cube';
 	Cube.prototype.icon = 'fa-cube';
@@ -1139,6 +1169,11 @@ new NodePreviewController(Cube, {
 
 		mesh.geometry.setAttribute('highlight', new THREE.BufferAttribute(new Uint8Array(24).fill(0), 1));
 
+		// Modified for Vintage Bench on 2026-06-22: child cuboids attach here so Vintage Story parent elements apply from-minus-origin before child transforms.
+		mesh.vintage_story_child_anchor = new THREE.Object3D();
+		mesh.vintage_story_child_anchor.name = element.uuid + '_vintage_story_children';
+		mesh.add(mesh.vintage_story_child_anchor);
+
 		// Outline
 		let geometry = new THREE.BufferGeometry();
 		let line = new THREE.Line(geometry, Canvas.outlineMaterial);
@@ -1181,6 +1216,13 @@ new NodePreviewController(Cube, {
 		let mesh = element.mesh;
 		var from = element.from.slice()
 		var to = element.to.slice()
+		if (mesh.vintage_story_child_anchor) {
+			mesh.vintage_story_child_anchor.position.set(
+				element.from[0] - element.origin[0],
+				element.from[1] - element.origin[1],
+				element.from[2] - element.origin[2]
+			);
+		}
 
 		adjustFromAndToForInflateAndStretch(from, to, element);
 

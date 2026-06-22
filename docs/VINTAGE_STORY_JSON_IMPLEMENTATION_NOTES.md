@@ -162,6 +162,7 @@ For this pass:
 - `js/formats/bbmodel.js` keeps the old Blockbench project serializer only for internal project/session data and only loads JSON with a `meta` object.
 - `js/io/io.js` saves through the active format codec, so main Save writes Vintage Story JSON to `.json`.
 - `js/io/project.ts`, `js/outliner/types/cube.js`, `js/outliner/types/group.js`, and `js/texturing/textures.js` now have hidden `vintage_story`/`vintage_story_data` properties for raw-field preservation.
+- Modified for Vintage Bench on 2026-06-22: cuboids in the Vintage Story format can now act as outliner parents. Imported Vintage Story elements with `children` stay as cuboid elements instead of being split into a group plus generated geometry child.
 
 ## Supported fields in this pass
 
@@ -169,7 +170,7 @@ For this pass:
 - Elements: `name`, `from`, `to`, `shade`, `rotationOrigin`, `rotationX`, `rotationY`, `rotationZ`, `faces`, `children`.
 - Faces: `texture`, `uv`, `rotation`, `enabled`.
 - Textures: texture code, logical Vintage Story texture path, per-texture UV size through `textureSizes`.
-- Hierarchy: recursive Vintage Story `children` map to the editable outliner hierarchy. Zero-size parent elements with children and no enabled faces import as internal parent nodes. Vintage Story elements that have both geometry and children currently import as an internal parent node with a marked self-geometry cuboid; export folds that pair back into one Vintage Story element so Blockbench-specific helper structure is not written to JSON.
+- Hierarchy: recursive Vintage Story `children` map to parent-capable cuboids in the editable outliner. Zero-size parent elements import as cuboids with disabled faces and children. Vintage Story elements that have both geometry and children import as a single parent cuboid with child cuboids underneath it.
 
 ## Preserved but not editable yet
 
@@ -184,8 +185,8 @@ For this pass:
 - Animation editing is not implemented. Imported animation JSON is preserved and re-emitted only as raw JSON.
 - Attachment point and locator editing is not implemented. Imported attachment point JSON is preserved on the owning element.
 - Non-cube/non-group outliner nodes are warned and skipped during Vintage Story export.
-- Elements with both geometry and children still need a native Vintage Bench parent-cuboid editing model. The current editable outliner uses an internal helper parent plus self-geometry cuboid because the inherited editor architecture only gives true child containers to group-like nodes. This must remain hidden from exported Vintage Story JSON.
-- Complex nested rotation/scale validation against the actual game remains TODO for editable imports. Display preview reference shapes now use the VSMC2-style parent-child transform sequence for local game assets.
+- Legacy projects/imports that still contain `vintage_story.kind === "parent_geometry"` are preserved and folded during export for backward compatibility with the earlier workaround.
+- Complex nested scale validation against the actual game remains TODO for editable imports. Parent/child cuboid rendering now uses the VSMC2-style transform sequence by anchoring child cuboids at the parent element's `from - rotationOrigin` offset.
 - Texture asset path resolution for editable model import is not implemented beyond placeholder references; logical Vintage Story paths are preserved. Display preview reference shapes resolve local face textures from the shape/asset texture maps.
 
 ## Test fixtures and manual checks
@@ -208,5 +209,5 @@ Manual runtime checks:
 3. Create a new `Vintage Story Model`.
 4. Confirm the starter cube and placeholder `texture` reference exist.
 5. Save as `.json` and confirm the output has Vintage Story root fields, not Blockbench `meta`.
-6. Open each fixture JSON and confirm cubes/groups appear in the outliner.
+6. Open each fixture JSON and confirm parent elements with `children` appear as parent cuboids with child cuboids underneath them.
 7. Save/export each fixture and confirm unknown fields, disabled faces, texture references, and hierarchy remain in the output JSON.
