@@ -5,6 +5,7 @@ import VersionUtil from '../util/version_util';
 
 const FORMATV = '5.0';
 
+// Modified for Vintage Bench on 2026-06-22: this codec is kept for internal recovery/session data, not user-facing Vintage Story shape JSON.
 function processHeader(model) {
 	if (!model.meta) {
 		Blockbench.showMessageBox({
@@ -99,13 +100,14 @@ function processCompatibility(model) {
 }
 
 var codec = new Codec('project', {
-	name: 'Vintage Bench JSON Model',
+	name: 'Vintage Bench Internal Project Data',
 	extension: 'json',
 	remember: true,
 	support_partial_export: true,
 	load_filter: {
 		type: 'json',
-		extensions: ['json']
+		extensions: ['json'],
+		condition: model => model && model.meta
 	},
 	load(model, file) {
 		if (!model || !model.meta) {
@@ -848,20 +850,24 @@ var codec = new Codec('project', {
 		this.dispatchEvent('parsed', {model})
 	}
 })
-Formats.free.codec = codec;
+if (!Formats.free.codec) Formats.free.codec = codec;
 
 BARS.defineActions(function() {
+	function getActiveUserModelCodec() {
+		return Format?.codec || codec;
+	}
 	codec.export_action = new Action('save_project', {
 		icon: 'save',
 		category: 'file',
 		keybind: new Keybind({key: 's', ctrl: true, alt: true}),
 		condition: () => Project,
 		click: function () {
+			let active_codec = getActiveUserModelCodec();
 			saveTextures(true)
 			if (isApp && Project.save_path) {
-				codec.write(codec.compile(), Project.save_path);
+				active_codec.write(active_codec.compile(), Project.save_path);
 			} else {
-				codec.export()
+				active_codec.export()
 			}
 		}
 	})
@@ -872,6 +878,7 @@ BARS.defineActions(function() {
 		keybind: new Keybind({key: 's', shift: true, alt: true}),
 		condition: isApp ? (() => Project && Project.save_path) : false,
 		click: function () {
+			let active_codec = getActiveUserModelCodec();
 			saveTextures(true);
 			let projectTailRegex = /\.json$/;
 			let projectVerRegex = /([0-9]+)\.json$/;
@@ -890,7 +897,7 @@ BARS.defineActions(function() {
 				file_path = original_file_path.replace(projectTailRegex, `_alt_${i == 1 ? '' : i}.json`);
 				i++;
 			}
-			codec.write(codec.compile(), file_path);
+			active_codec.write(active_codec.compile(), file_path);
 		}
 	})
 
@@ -900,8 +907,9 @@ BARS.defineActions(function() {
 		keybind: new Keybind({key: 's', ctrl: true, alt: true, shift: true}),
 		condition: () => Project,
 		click: function () {
+			let active_codec = getActiveUserModelCodec();
 			saveTextures(true)
-			codec.export()
+			active_codec.export()
 		}
 	})
 	new Action('import_project', {
@@ -909,15 +917,20 @@ BARS.defineActions(function() {
 		category: 'file',
 		condition: () => Format && !Format.pose_mode,
 		click: function () {
+			let active_codec = getActiveUserModelCodec();
 			Blockbench.import({
 				resource_id: 'model',
-				extensions: [codec.extension],
-				type: codec.name,
+				extensions: [active_codec.extension],
+				type: active_codec.name,
 				multiple: true,
 			}, function(files) {
 				files.forEach(file => {
 					var model = autoParseJSON(file.content, {file_path: file.path});
-					codec.merge(model);
+					if (active_codec.id == 'project' && active_codec.merge) {
+						active_codec.merge(model);
+					} else if (active_codec.load) {
+						active_codec.load(model, file, {import_to_current_project: true});
+					}
 				})
 			})
 		}

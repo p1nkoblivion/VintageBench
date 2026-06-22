@@ -89,6 +89,7 @@ export class ModelProject {
 		[key: string]: any
 	}
 	unhandled_root_fields: any
+	vintage_story_data: any
 	ambientocclusion: boolean
 	front_gui_light: boolean
 
@@ -677,6 +678,10 @@ new Property(ModelProject, 'array', 'timeline_setups', {
 	condition: () => Format.animation_mode,
 });
 new Property(ModelProject, 'object', 'unhandled_root_fields', {
+	exposed: false
+});
+// Modified for Vintage Bench on 2026-06-22: stores preserved Vintage Story shape JSON fields not yet editable in the UI.
+new Property(ModelProject, 'object', 'vintage_story_data', {
 	exposed: false
 });
 

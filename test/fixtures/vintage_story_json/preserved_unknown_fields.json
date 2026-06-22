@@ -1,0 +1,46 @@
+{
+	"editor": {
+		"allAngles": true
+	},
+	"textureWidth": 16,
+	"textureHeight": 16,
+	"textures": {
+		"texture": ""
+	},
+	"vintageBenchUnknownRootFixture": {
+		"kept": true
+	},
+	"animations": [
+		{
+			"name": "idle",
+			"code": "idle"
+		}
+	],
+	"elements": [
+		{
+			"name": "PreserveMe",
+			"from": [0, 0, 0],
+			"to": [2, 2, 2],
+			"shade": true,
+			"renderPass": -1,
+			"faces": {
+				"north": {
+					"texture": "#texture",
+					"uv": [0, 0, 2, 2],
+					"glow": 4,
+					"vintageBenchUnknownFaceFixture": "kept"
+				}
+			},
+			"rotationOrigin": [1, 1, 1],
+			"attachmentpoints": [
+				{
+					"code": "fixture",
+					"posX": 1,
+					"posY": 1,
+					"posZ": 1
+				}
+			],
+			"vintageBenchUnknownElementFixture": "kept"
+		}
+	]
+}

@@ -154,3 +154,59 @@ For this pass:
 - Rotated nested element behavior is documented from VSMC2 but only basic import/export is in scope for this pass.
 - A real in-game validation pass is still needed after this initial codec implementation.
 
+## Implemented Vintage Bench mapping
+
+- `js/formats/vintage_story_json.js` is the central Vintage Story JSON codec module.
+- `js/formats/generic.ts` now exposes the single create-new option as `Vintage Story Model`.
+- `js/main.ts` registers the Vintage Story JSON codec after the internal project serializer, so `Formats.free.codec` points at Vintage Story JSON for user save/open.
+- `js/formats/bbmodel.js` keeps the old Blockbench project serializer only for internal project/session data and only loads JSON with a `meta` object.
+- `js/io/io.js` saves through the active format codec, so main Save writes Vintage Story JSON to `.json`.
+- `js/io/project.ts`, `js/outliner/types/cube.js`, `js/outliner/types/group.js`, and `js/texturing/textures.js` now have hidden `vintage_story`/`vintage_story_data` properties for raw-field preservation.
+
+## Supported fields in this pass
+
+- Root: `editor`, `textures`, `textureWidth`, `textureHeight`, `textureSizes`, `elements`, `animations` preservation.
+- Elements: `name`, `from`, `to`, `shade`, `rotationOrigin`, `rotationX`, `rotationY`, `rotationZ`, `faces`, `children`.
+- Faces: `texture`, `uv`, `rotation`, `enabled`.
+- Textures: texture code, logical Vintage Story texture path, per-texture UV size through `textureSizes`.
+- Hierarchy: recursive Vintage Story `children` map to outliner groups/cubes. Zero-size parent elements with children and no enabled faces import as groups. Vintage Story elements that have both geometry and children import as a group with a marked self-geometry cube; export folds that pair back into one Vintage Story element.
+
+## Preserved but not editable yet
+
+- Root unknown fields.
+- Root `animations` array.
+- Element unknown fields such as `renderPass`, `attachmentpoints`, `stepParentName`, `scaleX`, `scaleY`, `scaleZ`, unwrap metadata, climate/season maps, and render flags.
+- Face unknown fields such as `glow`, `windMode`, `windData`, `reflectiveMode`, `frostable`, `autoUv`, `snapUv`, and VSMC2 editor fields such as `rotationIndex`.
+- Non-string texture values are preserved as raw JSON on the texture metadata.
+
+## Unsupported or lossy in this pass
+
+- Animation editing is not implemented. Imported animation JSON is preserved and re-emitted only as raw JSON.
+- Attachment point and locator editing is not implemented. Imported attachment point JSON is preserved on the owning element.
+- Non-cube/non-group outliner nodes are warned and skipped during Vintage Story export.
+- Elements with both geometry and children are represented with an extra self-geometry cube in the outliner because Blockbench cubes cannot directly parent children.
+- Complex nested rotation/scale validation against the actual game remains TODO.
+- Texture asset path resolution is not implemented beyond placeholder references; logical Vintage Story paths are preserved.
+
+## Test fixtures and manual checks
+
+Fixtures added under `test/fixtures/vintage_story_json/`:
+
+- `default_cube.json`
+- `nested_rotated_cube.json`
+- `preserved_unknown_fields.json`
+- `parent_geometry_child.json`
+
+Automated helper test:
+
+- `npm run test-vintage-story-json`
+
+Manual runtime checks:
+
+1. Run `npm run build-electron`.
+2. Run `npm run electron`.
+3. Create a new `Vintage Story Model`.
+4. Confirm the starter cube and placeholder `texture` reference exist.
+5. Save as `.json` and confirm the output has Vintage Story root fields, not Blockbench `meta`.
+6. Open each fixture JSON and confirm cubes/groups appear in the outliner.
+7. Save/export each fixture and confirm unknown fields, disabled faces, texture references, and hierarchy remain in the output JSON.

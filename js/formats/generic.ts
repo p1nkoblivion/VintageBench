@@ -1,13 +1,14 @@
 new ModelFormat('free', {
 	icon: 'icon-format_free',
 	category: 'general',
-	name: 'Generic Model',
-	description: 'Cuboid-based JSON model for the Vintage Bench cleanup base.',
+	// Modified for Vintage Bench on 2026-06-22: this single creation option now targets Vintage Story shape JSON.
+	name: 'Vintage Story Model',
+	description: 'Cuboid-based Vintage Story JSON shape model.',
 	target: ['Vintage Story JSON'],
 	format_page: {
 		content: [
 			{type: 'h3', text: tl('mode.start.format.informations')},
-			{text: 'Cuboid editing base for Vintage Bench. TODO: replace Blockbench project serialization with a proper Vintage Story shape JSON codec.'}
+			{text: 'Cuboid editing base for Vintage Bench. Saves and opens Vintage Story shape JSON. TODO: add Vintage Story-specific display and validation tools.'}
 		]
 	},
 	rotate_cubes: true,
@@ -22,4 +23,7 @@ new ModelFormat('free', {
 	per_animator_rotation_interpolation: true,
 	animated_textures: true,
 	locators: true,
+	onSetup(project, new_model) {
+		(window as any).VintageStoryJson?.setupNewVintageStoryProject(project, new_model);
+	},
 })

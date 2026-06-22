@@ -2231,6 +2231,8 @@ export class Texture {
 	new Property(Texture, 'number', 'height')
 	new Property(Texture, 'number', 'uv_width')
 	new Property(Texture, 'number', 'uv_height')
+	// Modified for Vintage Bench on 2026-06-22: keeps Vintage Story texture code/path metadata separate from local image files.
+	new Property(Texture, 'object', 'vintage_story')
 	new Property(Texture, 'boolean', 'particle')
 	new Property(Texture, 'boolean', 'use_as_default')
 	new Property(Texture, 'boolean', 'layers_enabled')

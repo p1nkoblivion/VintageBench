@@ -1,0 +1,35 @@
+{
+	"editor": {
+		"allAngles": true
+	},
+	"textureWidth": 16,
+	"textureHeight": 16,
+	"textures": {
+		"texture": ""
+	},
+	"elements": [
+		{
+			"name": "ParentCube",
+			"from": [0, 0, 0],
+			"to": [4, 4, 4],
+			"shade": true,
+			"faces": {
+				"north": {"texture": "#texture", "uv": [0, 0, 4, 4]}
+			},
+			"rotationOrigin": [2, 2, 2],
+			"rotationY": 22.5,
+			"children": [
+				{
+					"name": "ChildCube",
+					"from": [4, 0, 0],
+					"to": [6, 2, 2],
+					"shade": true,
+					"faces": {
+						"north": {"texture": "#texture", "uv": [0, 0, 2, 2]}
+					},
+					"rotationOrigin": [4, 1, 1]
+				}
+			]
+		}
+	]
+}

@@ -1,0 +1,39 @@
+{
+	"editor": {
+		"allAngles": true
+	},
+	"textureWidth": 32,
+	"textureHeight": 32,
+	"textures": {
+		"body": "block/wood/planks/oak"
+	},
+	"textureSizes": {
+		"body": [32, 32]
+	},
+	"elements": [
+		{
+			"name": "Root",
+			"from": [8, 0, 8],
+			"to": [8, 0, 8],
+			"shade": true,
+			"faces": {},
+			"rotationOrigin": [8, 0, 8],
+			"children": [
+				{
+					"name": "ChildCube",
+					"from": [7, 0, 7],
+					"to": [9, 2, 9],
+					"shade": true,
+					"faces": {
+						"north": {"texture": "#body", "uv": [0, 0, 2, 2]},
+						"south": {"texture": "#body", "uv": [0, 0, 2, 2], "rotation": 90},
+						"up": {"texture": "#body", "uv": [0, 0, 2, 2]},
+						"down": {"enabled": false, "texture": "#body", "uv": [0, 0, 2, 2]}
+					},
+					"rotationOrigin": [8, 1, 8],
+					"rotationY": 45
+				}
+			]
+		}
+	]
+}

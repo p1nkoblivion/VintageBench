@@ -124,6 +124,8 @@ new Property(CubeFace, 'number', 'tint', {default: -1});
 new Property(CubeFace, 'enum', 'cullface', {values: ['', 'north', 'south', 'west', 'east', 'up', 'down']});
 new Property(CubeFace, 'string', 'material_name');
 new Property(CubeFace, 'boolean', 'enabled', {default: true});
+// Modified for Vintage Bench on 2026-06-22: preserves uneditable Vintage Story face JSON during import/export.
+new Property(CubeFace, 'object', 'vintage_story');
 
 CubeFace.opposite = {
 	north: 'south',
@@ -1097,6 +1099,8 @@ new Property(Cube, 'number', 'light_emission', {
 		}
 	}
 });
+// Modified for Vintage Bench on 2026-06-22: preserves uneditable Vintage Story element JSON during import/export.
+new Property(Cube, 'object', 'vintage_story');
 
 OutlinerElement.registerType(Cube, 'cube');
 

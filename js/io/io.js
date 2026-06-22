@@ -580,16 +580,18 @@ BARS.defineActions(function() {
 			if (isApp) {
 				await saveTextures()
 				if (Format) {
-					if (Project.save_path) {
-						Codecs.project.write(Codecs.project.compile(), Project.save_path);
+					let save_codec = Format.codec || Codecs.project;
+					// Modified for Vintage Bench on 2026-06-22: main Save writes the active Vintage Story JSON codec, not Blockbench project internals.
+					if (Project.save_path && save_codec?.compile) {
+						save_codec.write(save_codec.compile(), Project.save_path);
 					}
-					if (Project.export_path && export_codec?.compile) {
+					if (Project.export_path && Project.export_path != Project.save_path && export_codec?.compile) {
 						if (export_codec.id != 'image') {
 							export_codec.write(export_codec.compile(), Project.export_path)
 						}
 
 					} else if (export_codec?.export && !Project.save_path) {
-						if (export_codec.id === 'project' || settings.dialog_save_codec.value == false) {
+						if (export_codec.id === 'project' || export_codec.id === 'vintage_story_json' || settings.dialog_save_codec.value == false) {
 							export_codec.export();
 
 						} else {
@@ -621,7 +623,7 @@ BARS.defineActions(function() {
 						}
 					} else if (!Project.save_path) {
 						if (Format.edit_mode) {
-							Codecs.project.export();
+							save_codec.export();
 						}
 					}
 				}

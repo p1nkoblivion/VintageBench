@@ -572,6 +572,8 @@ new Property(Group, 'vector', 'origin', {default() {
 	return Format.centered_grid ? [0, 0, 0] : [8, 8, 8]
 }});
 new Property(Group, 'vector', 'rotation');
+// Modified for Vintage Bench on 2026-06-22: groups export as Vintage Story parent elements and preserve uneditable fields.
+new Property(Group, 'object', 'vintage_story');
 new Property(Group, 'number', 'scope');
 new Property(Group, 'string', 'bedrock_binding', {
 	condition: {formats: ['bedrock']},
