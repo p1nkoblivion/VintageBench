@@ -346,7 +346,8 @@ export class ModelProject {
 		Panels.variable_placeholders.inside_vue.text = this.variable_placeholders.toString();
 		Panels.variable_placeholders.inside_vue.buttons.replace(this.variable_placeholder_buttons);
 
-		Panels.skin_pose.inside_vue.pose = this.skin_pose;
+		// Modified for Vintage Bench on 2026-06-22: Minecraft Skin pose UI is removed, so project loading must not require that panel.
+		if (Panels.skin_pose?.inside_vue) Panels.skin_pose.inside_vue.pose = this.skin_pose;
 
 		UVEditor.loadViewportOffset();
 
@@ -732,6 +733,8 @@ export function setupProject(format: ModelFormat | string, uuid?: string): boole
 		Format.onSetup(Project, false)
 	}
 	Blockbench.dispatchEvent('setup_project', {project});
+	// Modified for Vintage Bench on 2026-06-22: opening Vintage Story JSON must land in the editor, not leave the home screen visible.
+	setStartScreen(false);
 	return true;
 }
 // Setup brand new project
@@ -750,6 +753,8 @@ export function newProject(format: ModelFormat | string): boolean {
 		Format.onSetup(Project, true)
 	}
 	Blockbench.dispatchEvent('new_project', {project});
+	// Modified for Vintage Bench on 2026-06-22: creating the only supported model format should open the editable model workspace.
+	setStartScreen(false);
 	return true;
 }
 export function selectNoProject() {
@@ -782,7 +787,8 @@ export function selectNoProject() {
 	Panels.variable_placeholders.inside_vue.text = '';
 	Panels.variable_placeholders.inside_vue.buttons.empty();
 
-	Panels.skin_pose.inside_vue.pose = '';
+	// Modified for Vintage Bench on 2026-06-22: Minecraft Skin pose UI is removed, so the no-project state must tolerate it being absent.
+	if (Panels.skin_pose?.inside_vue) Panels.skin_pose.inside_vue.pose = '';
 
 	Blockbench.dispatchEvent('select_no_project', {});
 }
