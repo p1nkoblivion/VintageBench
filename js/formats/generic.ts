@@ -23,6 +23,10 @@ new ModelFormat('free', {
 	per_animator_rotation_interpolation: true,
 	animated_textures: true,
 	locators: true,
+	new() {
+		// Modified for Vintage Bench on 2026-06-22: create directly into the editor instead of reopening the setup/settings flow.
+		return newProject(this);
+	},
 	onSetup(project, new_model) {
 		(window as any).VintageStoryJson?.setupNewVintageStoryProject(project, new_model);
 	},
