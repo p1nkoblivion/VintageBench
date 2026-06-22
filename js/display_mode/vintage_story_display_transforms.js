@@ -40,7 +40,7 @@ export const VS_DISPLAY_CONTEXTS = [
 	{id: 'onshelfTransform', label: 'On shelf', section: 'Shelf / Rack', icon: 'table_view', jsonKey: 'onshelfTransform', location: 'attributes', references: ['shelf']},
 	{id: 'onscrollrackTransform', label: 'On scroll rack', section: 'Shelf / Rack', icon: 'receipt_long', jsonKey: 'onscrollrackTransform', location: 'attributes', references: ['scroll_rack']},
 
-	{id: 'guiTransform', label: 'GUI', section: 'GUI', icon: 'border_style', jsonKey: 'guiTransform', location: 'root', references: ['inventory_nine', 'inventory_full', 'hud']},
+	{id: 'guiTransform', label: 'GUI', section: 'GUI', icon: 'border_style', jsonKey: 'guiTransform', location: 'root', references: ['inventory_full', 'hud']},
 
 	{id: 'seraphPreviewTransform', label: 'Seraph preview', section: 'Entity / Armor', icon: 'accessibility', previewOnly: true, references: ['seraph']},
 	{id: 'armorStandPreviewTransform', label: 'Armor stand preview', section: 'Entity / Armor', icon: 'accessibility', previewOnly: true, references: ['vs_armor_stand']},

@@ -128,10 +128,19 @@ Changing these fields updates the preview immediately through `DisplayMode.updat
 
 Preview references are Vintage Story-named: Seraph, Vintage Story armor stand, mannequin, tongs, ground, shelf/rack holders, GUI, trap, forge, Omok tabletop, and firepit. This pass does not bundle Vintage Story assets. When `vintage_story_assets_path` points at a local Vintage Story installation, preview references load and convert the matching local shape JSON into cuboid preview geometry. Missing assets, unresolved shape indirection, or unresolved textures fall back to placeholders or neutral preview materials with a warning.
 
+Modified for Vintage Bench on 2026-06-22: GUI preview references now use `assets/inventory_full.png` and `assets/hud.png` as orthographic backdrops. The highlighted blue slot in each screenshot is calibrated as the `guiTransform` render target:
+
+| Reference | Image size | Highlighted slot pixels | Preview mapping |
+| --- | --- | --- | --- |
+| Inventory | 528 x 436 | x 122-173, y 107-158 | Slot center maps to the `guiTransform` origin; slot width maps to 16 model units. |
+| HUD | 850 x 115 | x 108-159, y 54-105 | Slot center maps to the `guiTransform` origin; slot width maps to 16 model units. |
+
+Both GUI references edit and export the same root `guiTransform` key. The reference selector only changes the preview backdrop; it does not write separate inventory or HUD JSON fields.
+
 ## TODOs
 
 - Improve local Vintage Story preview loading with full multi-texture material assignment and runtime variant resolution.
 - Confirm exact default transform presets from `ModelTransform` API or live game export.
-- Calibrate GUI preview against real Vintage Story inventory rendering.
+- Pixel-calibrate GUI lighting, camera framing, and item raster size against real in-game rendering.
 - Add richer warnings for alias/preview-only contexts in the UI.
 - Add in-game validation against real Vintage Story item/block JSON after the codec writes transforms.

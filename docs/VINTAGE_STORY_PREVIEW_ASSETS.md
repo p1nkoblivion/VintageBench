@@ -50,11 +50,13 @@ Modified for Vintage Bench on 2026-06-22: preview shape conversion follows Vinta
 
 Missing local assets, unresolved shapes, or unresolved textures do not crash the Display editor. The UI continues to open with placeholders or neutral materials and shows a short warning for the first issue encountered.
 
+Modified for Vintage Bench on 2026-06-22: GUI display previews use two bundled reference screenshots, `assets/inventory_full.png` and `assets/hud.png`. These are not copied Vintage Story shape or texture assets; they are calibration backdrops for the GUI item slot. The Display editor centers `guiTransform` on the blue highlighted slot in each image and scales the highlighted slot to 16 model units.
+
 Current limitations:
 
 - Shape variants are resolved with safe defaults such as `generic`, `complete`, `normal`, `wood`, `aged`, `square`, and firepit `extinct`; full Vintage Story variant/material resolution is not implemented yet.
 - Animation poses, attachment point behavior, overlay textures, and runtime renderer-specific effects are not previewed yet.
-- GUI preview dimensions still need pixel calibration against in-game rendering.
+- GUI preview now aligns to the highlighted HUD and inventory slot backdrops, but final in-game camera, lighting, and raster-size matching still need validation.
 
 ## TODOs
 

@@ -148,14 +148,29 @@ const VINTAGE_REFERENCE_BASES = {
 	shelf: [8, 7.75, 12, 0, 180, 0, 0.5, 0.5, 0.5],
 	scroll_rack: [8, 8, 12, 0, 180, 0, 0.5, 0.5, 0.5],
 	antler_mount: [8, 9, 12, 0, 180, 0, 0.5, 0.5, 0.5],
-	inventory_nine: [0, 0, 0, 0, 0, 0, 0.4, 0.4, 0.4],
-	inventory_full: [0, 0, 0, 0, 0, 0, 0.4, 0.4, 0.4],
-	hud: [0, 0, 0, 0, 0, 0, 0.4, 0.4, 0.4],
+	inventory_full: [0, 0, 0, 0, 0, 0, 1, 1, 1],
+	hud: [0, 0, 0, 0, 0, 0, 1, 1, 1],
 	trap: [8, 5, 8, 0, 0, 0, 0.6, 0.6, 0.6],
 	forge: [8, 5, 8, 0, 0, 0, 0.6, 0.6, 0.6],
 	omok_tabletop: [8, 9, 8, 0, 0, 0, 0.5, 0.5, 0.5],
 	firepit: [8, 5, 8, 0, 0, 0, 0.6, 0.6, 0.6],
 	default: [8, 8, 8, 0, 0, 0, 1, 1, 1]
+};
+
+const VINTAGE_GUI_REFERENCE_IMAGES = {
+	// Modified for Vintage Bench on 2026-06-22: align GUI preview backdrops to the highlighted Vintage Story item slot.
+	inventory_full: {
+		texture: 'assets/inventory_full.png',
+		image_size: [528, 436],
+		slot_bounds: [122, 107, 173, 158],
+		slot_units: 16
+	},
+	hud: {
+		texture: 'assets/hud.png',
+		image_size: [850, 115],
+		slot_bounds: [108, 54, 159, 105],
+		slot_units: 16
+	}
 };
 
 
@@ -201,6 +216,7 @@ export class refModel {
 		this.icon = options.icon || id;
 		this.models = options.models || [];
 		this.asset_id = options.asset_id;
+		this.gui_reference = options.gui_reference;
 		this.condition = options.condition;
 		this.initialized = false;
 		this.pose_angles = {};
@@ -254,6 +270,26 @@ export class refModel {
 			fragmentShader: prepareShader(FragShader),
 			side: THREE.DoubleSide,
 			transparent: true
+		});
+		mat.map = tex;
+		return mat;
+	}
+	getGuiReferenceMaterial(texture) {
+		let img = new Image();
+		img.src = texture;
+		let tex = new THREE.Texture(img);
+		img.tex = tex;
+		img.tex.magFilter = THREE.NearestFilter;
+		img.tex.minFilter = THREE.NearestFilter;
+		img.onload = function() {
+			this.tex.needsUpdate = true;
+		}
+		img.crossOrigin = '';
+		let mat = new THREE.MeshBasicMaterial({
+			map: tex,
+			transparent: true,
+			depthWrite: false,
+			side: THREE.DoubleSide
 		});
 		mat.map = tex;
 		return mat;
@@ -402,7 +438,31 @@ export class refModel {
 		this.model.name = options.name || this.name;
 		return this;
 	}
+	buildGuiReferenceModel(options) {
+		let [image_width, image_height] = options.image_size;
+		let [slot_min_x, slot_min_y, slot_max_x, slot_max_y] = options.slot_bounds;
+		let slot_width = slot_max_x - slot_min_x + 1;
+		let slot_height = slot_max_y - slot_min_y + 1;
+		let units_per_pixel = (options.slot_units || 16) / Math.max(slot_width, slot_height);
+		let geometry = new THREE.PlaneGeometry(image_width * units_per_pixel, image_height * units_per_pixel);
+		let mesh = new THREE.Mesh(geometry, this.getGuiReferenceMaterial(options.texture));
+		let slot_center_x = slot_min_x + slot_width / 2;
+		let slot_center_y = slot_min_y + slot_height / 2;
+
+		mesh.name = `${this.id}_reference`;
+		mesh.position.set(
+			(image_width / 2 - slot_center_x) * units_per_pixel,
+			(slot_center_y - image_height / 2) * units_per_pixel,
+			-32
+		);
+		this.model.add(mesh);
+		this.model.name = this.name;
+		return this;
+	}
 	buildModel(options) {
+		if (options.gui_reference_image) {
+			return this.buildGuiReferenceModel(options);
+		}
 		if (options.vintage_story_shape) {
 			return this.buildVintageStoryShapeModel(options);
 		}
@@ -456,6 +516,13 @@ export class refModel {
 		if (!this.initialized) {
 			let loaded_asset = this.asset_id ? loadVintageStoryPreviewModel(this.asset_id) : null;
 			let built_asset_model = false;
+			if (this.gui_reference) {
+				this.buildModel({
+					gui_reference_image: true,
+					...this.gui_reference
+				});
+				built_asset_model = true;
+			}
 			if (loaded_asset?.model) {
 				this.buildModel(loaded_asset.model);
 				built_asset_model = true;
@@ -548,16 +615,14 @@ export const displayReferenceObjects = {
 			asset_id: 'antler_mount',
 			models: [DisplayReferences.block]
 		}),
-		inventory_nine: new refModel('inventory_nine', {
-			icon: 'icon-inventory_nine',
-			models: []
-		}),
 		inventory_full: new refModel('inventory_full', {
 			icon: 'icon-inventory_full',
+			gui_reference: VINTAGE_GUI_REFERENCE_IMAGES.inventory_full,
 			models: []
 		}),
 		hud: new refModel('hud', {
 			icon: 'icon-hud',
+			gui_reference: VINTAGE_GUI_REFERENCE_IMAGES.hud,
 			models: []
 		}),
 		trap: new refModel('trap', {
@@ -585,6 +650,8 @@ export const displayReferenceObjects = {
 	bar: function(buttons) {
 		buttons = buttons.filter(id => Condition(this.refmodels[id]));
 		$('#display_ref_bar').html('');
+		let selected_index = displayReferenceObjects.ref_indexes[DisplayMode.display_slot] || 0;
+		if (selected_index >= buttons.length) selected_index = 0;
 		if (buttons.length < 2) {
 			$('.reference_model_bar').css('visibility', 'hidden')
 		} else {
@@ -604,7 +671,7 @@ export const displayReferenceObjects = {
 			)
 			button.find('> label.tool').append(icon);
 			$('#display_ref_bar').append(button)
-			if (i === displayReferenceObjects.ref_indexes[DisplayMode.display_slot]) {
+			if (i === selected_index) {
 				ref.load(i)
 				button.find('input').prop("checked", true)
 			}
