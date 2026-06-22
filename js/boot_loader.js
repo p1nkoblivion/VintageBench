@@ -1,5 +1,5 @@
 import { Blockbench } from "./api";
-import { updateStreamerModeNotification } from "./interface/setup_settings";
+import { promptVintageStoryAssetPathOnFirstLaunch, updateStreamerModeNotification } from "./interface/setup_settings";
 import { loadThemes } from "./interface/themes";
 import { translateUI } from "./languages";
 import { loadInstalledPlugins } from "./plugin_loader";
@@ -134,6 +134,7 @@ localStorage.setItem('last_version', Blockbench.version);
 })()
 
 setStartScreen(true);
+promptVintageStoryAssetPathOnFirstLaunch();
 
 if (Blockbench.isMobile) {
 	// Reselect tool to update transform toolbar in status bar on mobile

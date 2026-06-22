@@ -1,0 +1,66 @@
+{
+	"textureWidth": 16,
+	"textureHeight": 16,
+	"textures": {
+		"texture": ""
+	},
+	"elements": [
+		{
+			"name": "cube",
+			"from": [0, 0, 0],
+			"to": [16, 16, 16],
+			"faces": {
+				"north": {"texture": "#texture", "uv": [0, 0, 16, 16]},
+				"east": {"texture": "#texture", "uv": [0, 0, 16, 16]},
+				"south": {"texture": "#texture", "uv": [0, 0, 16, 16]},
+				"west": {"texture": "#texture", "uv": [0, 0, 16, 16]},
+				"up": {"texture": "#texture", "uv": [0, 0, 16, 16]},
+				"down": {"texture": "#texture", "uv": [0, 0, 16, 16]}
+			}
+		}
+	],
+	"guiTransform": {
+		"translation": {"x": 1, "y": 2, "z": 3},
+		"rotation": {"x": 10, "y": 20, "z": 30},
+		"origin": {"x": 0.5, "y": 0.5, "z": 0.5},
+		"scale": 1.25
+	},
+	"tpHandTransform": {
+		"translation": {"x": -1, "y": 0, "z": 2},
+		"rotation": {"x": 0, "y": 45, "z": 0},
+		"origin": {"x": 0, "y": 0, "z": 0},
+		"scale": 0.9
+	},
+	"tpOffHandTransform": {
+		"translation": {"x": 2, "y": 0, "z": -1},
+		"rotation": {"x": 0, "y": -45, "z": 0},
+		"origin": {"x": 0, "y": 0, "z": 0},
+		"scale": 0.9
+	},
+	"groundTransform": {
+		"translation": {"x": 0, "y": 1, "z": 0},
+		"rotation": {"x": 0, "y": 0, "z": 0},
+		"origin": {"x": 0, "y": 0, "z": 0},
+		"scale": 1
+	},
+	"attributes": {
+		"toolrackTransform": {
+			"translation": {"x": 0, "y": 0, "z": 1},
+			"rotation": {"x": 0, "y": 180, "z": 0},
+			"origin": {"x": 0, "y": 0, "z": 0},
+			"scale": 0.75
+		},
+		"onshelfTransform": {
+			"translation": {"x": 0.25, "y": 0.5, "z": 0.75},
+			"rotation": {"x": 0, "y": 90, "z": 0},
+			"origin": {"x": 0, "y": 0, "z": 0},
+			"scale": 0.8
+		},
+		"inForgeTransform": {
+			"translation": {"x": 0, "y": -1, "z": 0},
+			"rotation": {"x": 0, "y": 0, "z": 0},
+			"origin": {"x": 0.25, "y": 0.25, "z": 0.25},
+			"scale": 1.1
+		}
+	}
+}

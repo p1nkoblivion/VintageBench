@@ -1,0 +1,27 @@
+{
+	"textureWidth": 16,
+	"textureHeight": 16,
+	"textures": {
+		"texture": ""
+	},
+	"elements": [],
+	"guiTransform": {
+		"translation": {"x": 0, "y": 0, "z": 0},
+		"rotation": {"x": 0, "y": 0, "z": 0},
+		"origin": {"x": 0, "y": 0, "z": 0},
+		"scaleXyz": {"x": 1, "y": 2, "z": 1},
+		"customGuiField": true
+	},
+	"attributes": {
+		"onscrollrackTransform": {
+			"translation": {"x": 1, "y": 1, "z": 1},
+			"rotation": {"x": 0, "y": 0, "z": 0},
+			"origin": {"x": 0, "y": 0, "z": 0},
+			"scale": 0.5,
+			"customRackField": "preserve"
+		},
+		"unrelatedAttribute": {
+			"keep": true
+		}
+	}
+}

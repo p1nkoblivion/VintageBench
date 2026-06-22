@@ -1,8 +1,56 @@
 import { AutoBackup } from "../auto_backup";
 import { changeImageEditor } from "../desktop";
-import { currentwindow } from "../native_apis";
+import { app, currentwindow, dialog, fs, PathModule, SystemInfo } from "../native_apis";
 import { Setting, Settings, SettingsProfile } from "./settings";
 import { addStartScreenSection } from "./start_screen";
+
+export function getDefaultVintageStoryAssetPath() {
+	if (!isApp) return '';
+	return PathModule.join(SystemInfo.appdata_directory || app.getPath('appData'), 'Vintagestory');
+}
+
+export function chooseVintageStoryAssetPath() {
+	if (!isApp) return;
+	let current_path = settings.vintage_story_assets_path?.value || getDefaultVintageStoryAssetPath();
+	let result = dialog.showOpenDialogSync(currentwindow, {
+		title: tl('message.vintage_story_assets.title'),
+		defaultPath: current_path,
+		properties: ['openDirectory']
+	});
+	if (result?.[0]) {
+		settings.vintage_story_assets_path.set(result[0]);
+		Settings.saveLocalStorages();
+		return result[0];
+	}
+}
+
+export function promptVintageStoryAssetPathOnFirstLaunch() {
+	if (!isApp || settings.vintage_story_assets_path?.value || localStorage.getItem('vintage_story_assets_prompted')) return;
+	localStorage.setItem('vintage_story_assets_prompted', 'true');
+	setTimeout(() => {
+		let default_path = getDefaultVintageStoryAssetPath();
+		let result = dialog.showMessageBoxSync(currentwindow, {
+			type: 'question',
+			noLink: true,
+			title: tl('message.vintage_story_assets.title'),
+			message: tl('message.vintage_story_assets.message'),
+			detail: default_path,
+			defaultId: fs.existsSync(default_path) ? 1 : 0,
+			cancelId: 2,
+			buttons: [
+				tl('message.vintage_story_assets.select'),
+				tl('message.vintage_story_assets.default'),
+				tl('message.vintage_story_assets.later')
+			]
+		});
+		if (result === 0) {
+			chooseVintageStoryAssetPath();
+		} else if (result === 1) {
+			settings.vintage_story_assets_path.set(default_path);
+			Settings.saveLocalStorages();
+		}
+	}, 800);
+}
 
 function setupSettings() {
 	if (localStorage.getItem('settings') != null) {
@@ -139,7 +187,7 @@ function setupSettings() {
 	new Setting('volume', 							{category: 'preview', value: 80, min: 0, max: 200, type: 'number'});
 	new Setting('audio_scrubbing',					{category: 'preview', value: true});
 	new Setting('save_view_per_tab',				{category: 'preview', value: true});
-	new Setting('display_skin',						{category: 'preview', value: false, type: 'click', icon: 'icon-player', condition: false, click: function() { changeDisplaySkin() }});
+	new Setting('vintage_story_assets_path',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
 
 	new Setting('viewport_rotate_speed',	{category: 'controls', value: 100, min: 10, max: 1000, type: 'number', onChange(value) {
 		Preview.all.forEach(viewport => viewport.controls.rotateSpeed = value / 100)

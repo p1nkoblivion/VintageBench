@@ -1,6 +1,13 @@
+import {
+	VS_DISPLAY_ATTRIBUTE_KEYS,
+	VS_DISPLAY_DIRECT_KEYS,
+	applyVintageStoryDisplayTransformsToModel,
+	collectVintageStoryDisplayTransformsFromModel
+} from '../display_mode/vintage_story_display_transforms.js';
+
 const VS_FACE_DIRECTIONS = ['north', 'east', 'south', 'west', 'up', 'down'];
 const VS_DEFAULT_TEXTURE_CODE = 'texture';
-const VS_ROOT_FIELDS = new Set(['editor', 'textures', 'elements', 'animations', 'textureWidth', 'textureHeight', 'textureSizes']);
+const VS_ROOT_FIELDS = new Set(['editor', 'textures', 'elements', 'animations', 'textureWidth', 'textureHeight', 'textureSizes', 'attributes', ...VS_DISPLAY_DIRECT_KEYS]);
 const VS_ELEMENT_MAPPED_FIELDS = new Set([
 	'name',
 	'from',
@@ -14,6 +21,7 @@ const VS_ELEMENT_MAPPED_FIELDS = new Set([
 	'children'
 ]);
 const VS_FACE_MAPPED_FIELDS = new Set(['texture', 'uv', 'rotation', 'enabled']);
+const VS_ATTRIBUTE_TRANSFORM_FIELDS = new Set(VS_DISPLAY_ATTRIBUTE_KEYS);
 
 function isPlainObject(value) {
 	return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -379,7 +387,10 @@ function applyVintageStoryShapeToProject(model, path, options = {}) {
 	vs_data.animations = Array.isArray(model.animations) ? cloneJSON(model.animations) : [];
 	vs_data.had_animations = Array.isArray(model.animations);
 	vs_data.texture_sizes = isPlainObject(model.textureSizes) ? cloneJSON(model.textureSizes) : {};
+	// Modified for Vintage Bench on 2026-06-22: preserve non-display attributes while editable display transforms use Project.display_settings.
+	vs_data.attributes = isPlainObject(model.attributes) ? copyUnknownFields(model.attributes, VS_ATTRIBUTE_TRANSFORM_FIELDS) : {};
 	vs_data.source_path = path || '';
+	Project.display_settings = Object.assign(Project.display_settings || {}, collectVintageStoryDisplayTransformsFromModel(model, warnings));
 
 	if (hasKeys(vs_data.root_extra)) {
 		addWarning(warnings, 'Root object contains preserved fields that are not editable yet.');
@@ -552,6 +563,9 @@ export function compileVintageStoryShape(options = {}) {
 	let vs_data = Project.vintage_story_data || {};
 	let shape = cloneJSON(vs_data.root_extra || {});
 	shape.editor = cloneJSON(vs_data.editor || {allAngles: true});
+	if (hasKeys(vs_data.attributes)) {
+		shape.attributes = cloneJSON(vs_data.attributes);
+	}
 	shape.textureWidth = Project.texture_width || 16;
 	shape.textureHeight = Project.texture_height || 16;
 	if (Object.keys(texture_data.texture_sizes).length) {
@@ -568,6 +582,7 @@ export function compileVintageStoryShape(options = {}) {
 	if (vs_data.had_animations || (Array.isArray(vs_data.animations) && vs_data.animations.length)) {
 		shape.animations = cloneJSON(vs_data.animations || []);
 	}
+	applyVintageStoryDisplayTransformsToModel(shape, Project.display_settings);
 	if (warnings.length && typeof console !== 'undefined') {
 		console.warn('Vintage Story JSON export warnings:', warnings);
 	}
@@ -618,7 +633,8 @@ export function setupNewVintageStoryProject(project, new_model) {
 		editor: {allAngles: true},
 		animations: [],
 		had_animations: false,
-		texture_sizes: {}
+		texture_sizes: {},
+		attributes: {}
 	};
 	if (!new_model || typeof Texture === 'undefined' || typeof Cube === 'undefined') return;
 	let texture = setupDefaultVintageStoryTexture();
