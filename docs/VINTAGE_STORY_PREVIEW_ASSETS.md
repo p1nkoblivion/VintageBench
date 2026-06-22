@@ -37,15 +37,25 @@ Expected source paths under the selected Vintage Story folder:
 This pass centralizes:
 
 - `vintage_story_assets_path` setting and first-run folder prompt.
-- `js/display_mode/vintage_story_preview_assets.js` asset metadata and missing-file checks.
+- `js/display_mode/vintage_story_preview_assets.js` asset metadata, local path resolution, JSON-like asset parsing, shape indirection, and texture resolution.
+- `js/display_mode/vintage_story_asset_parser.js` conservative parser for shipped Vintage Story JSON-like files that use comments, unquoted keys, single-quoted strings, or trailing commas.
 - Vintage Story display context metadata in `js/display_mode/vintage_story_display_transforms.js`.
-- Safe placeholder preview holders in `js/display_mode/display_mode.js`.
+- Local Vintage Story shape-to-preview conversion in `js/display_mode/display_mode.js`.
 
-Missing local assets do not crash the Display editor. The UI continues to open with placeholders and shows a short warning when an expected local asset is missing.
+When a configured local asset resolves successfully, Vintage Bench builds a preview reference model from the resolved Vintage Story shape elements. Blocktype, itemtype, and entity files that point at a `shape.base` or `client.shape.base` are resolved into the matching `assets/<domain>/shapes/**/*.json` file. Texture references are resolved through the loaded asset/shape texture maps into `assets/<domain>/textures/**/*.png` or `.jpg` when possible.
+
+Missing local assets, unresolved shapes, or unresolved textures do not crash the Display editor. The UI continues to open with placeholders or neutral materials and shows a short warning for the first issue encountered.
+
+Current limitations:
+
+- The preview converter uses the first resolvable texture for a reference shape. Multi-texture preview material assignment is still approximate.
+- Shape variants are resolved with safe defaults such as `generic`, `complete`, `normal`, `wood`, `aged`, `square`, and firepit `extinct`; full Vintage Story variant/material resolution is not implemented yet.
+- Animation poses, attachment point behavior, overlay textures, and runtime renderer-specific effects are not previewed yet.
+- GUI preview dimensions still need pixel calibration against in-game rendering.
 
 ## TODOs
 
-- Parse Vintage Story shape JSON for preview-only holders from the configured local path.
-- Resolve texture paths through each loaded block/item/entity JSON file.
-- Add a clear missing-asset warning in the Display editor.
+- Add richer missing/unresolved asset warnings directly inside the Display panel.
 - Add a developer-only cache folder for locally converted preview assets and keep it out of git.
+- Add full multi-texture material assignment for reference shapes.
+- Source exact vanilla default transform presets from live game/API behavior.

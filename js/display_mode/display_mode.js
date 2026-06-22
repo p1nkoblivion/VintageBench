@@ -11,7 +11,11 @@ import {
 	createNeutralVintageStoryDisplaySlot,
 	getVintageStoryDisplayContext
 } from "./vintage_story_display_transforms";
-import { warnAboutMissingVintageStoryPreviewAssets } from "./vintage_story_preview_assets";
+import {
+	loadVintageStoryPreviewModel,
+	warnAboutMissingVintageStoryPreviewAssets,
+	warnAboutVintageStoryPreviewAssetLoad
+} from "./vintage_story_preview_assets";
 
 var ground_timer = 0
 var display_presets;
@@ -196,6 +200,7 @@ export class refModel {
 		this.id = id;
 		this.icon = options.icon || id;
 		this.models = options.models || [];
+		this.asset_id = options.asset_id;
 		this.condition = options.condition;
 		this.initialized = false;
 		this.pose_angles = {};
@@ -215,38 +220,152 @@ export class refModel {
 			}
 		}
 	}
+	getMaterial(options) {
+		let {texture, material_color} = options;
+		if (texture === 'black') {
+			return new THREE.MeshBasicMaterial({color: 0x101013});
+		}
+		if (!texture) {
+			return new THREE.MeshBasicMaterial({
+				color: material_color || 0x6e675a,
+				side: THREE.DoubleSide
+			});
+		}
+
+		let img = new Image();
+		img.src = texture;
+		let tex = new THREE.Texture(img);
+		img.tex = tex;
+		img.tex.magFilter = THREE.NearestFilter;
+		img.tex.minFilter = THREE.NearestFilter;
+		img.onload = function() {
+			this.tex.needsUpdate = true;
+		}
+		img.crossOrigin = '';
+		let mat = new THREE.ShaderMaterial({
+			uniforms: {
+				map: {type: 't', value: tex},
+				SHADE: {type: 'bool', value: settings.shading.value},
+				LIGHTCOLOR: {type: 'vec3', value: new THREE.Color().copy(Canvas.global_light_color).multiplyScalar(settings.brightness.value / 50)},
+				LIGHTSIDE: {type: 'int', value: Canvas.global_light_side},
+				EMISSIVE: {type: 'bool', value: false}
+			},
+			vertexShader: prepareShader(VertShader),
+			fragmentShader: prepareShader(FragShader),
+			side: THREE.DoubleSide,
+			transparent: true
+		});
+		mat.map = tex;
+		return mat;
+	}
+	getUVArray(face, texture_size) {
+		let uv = Array.isArray(face?.uv) ? face.uv : [0, 0, texture_size[0], texture_size[1]];
+		var arr = [
+			[uv[0]/texture_size[0], 1-(uv[1]/texture_size[1])],
+			[uv[2]/texture_size[0], 1-(uv[1]/texture_size[1])],
+			[uv[0]/texture_size[0], 1-(uv[3]/texture_size[1])],
+			[uv[2]/texture_size[0], 1-(uv[3]/texture_size[1])]
+		]
+		var rot = (face?.rotation+0) || 0;
+		while (rot > 0) {
+			let a = arr[0];
+			arr[0] = arr[2];
+			arr[2] = arr[3];
+			arr[3] = arr[1];
+			arr[1] = a;
+			rot = rot-90;
+		}
+		return arr;
+	}
+	applyFaceUVs(mesh, faces, texture_size) {
+		if (!faces) return;
+		for (var face in faces) {
+			if (faces.hasOwnProperty(face) && faces[face]?.uv !== undefined && faces[face]?.enabled !== false) {
+				var fIndex = 0;
+				switch(face) {
+					case 'north':   fIndex = 10;   break;
+					case 'east':	fIndex = 0;	break;
+					case 'south':   fIndex = 8;	break;
+					case 'west':	fIndex = 2;	break;
+					case 'up':	  fIndex = 4;	break;
+					case 'down':	fIndex = 6;	break;
+				}
+				let uv_array = this.getUVArray(faces[face], texture_size);
+				mesh.geometry.attributes.uv.array.set(uv_array[0], fIndex*4 + 0);  //0,1
+				mesh.geometry.attributes.uv.array.set(uv_array[1], fIndex*4 + 2);  //1,1
+				mesh.geometry.attributes.uv.array.set(uv_array[2], fIndex*4 + 4);  //0,0
+				mesh.geometry.attributes.uv.array.set(uv_array[3], fIndex*4 + 6);  //1,0
+				mesh.geometry.attributes.uv.needsUpdate = true;
+			}
+		}
+	}
+	buildVintageStoryShapeModel(options) {
+		let shape = options.vintage_story_shape;
+		let texture_size = options.texture_size || [shape.textureWidth || 16, shape.textureHeight || 16];
+		let mat = this.getMaterial(options);
+		let scope = this;
+		this.material = mat;
+
+		function vector(value, fallback = [0, 0, 0]) {
+			return Array.isArray(value) ? value : fallback;
+		}
+		function number(value, fallback = 0) {
+			return typeof value === 'number' && isFinite(value) ? value : fallback;
+		}
+		function buildElement(element, parent) {
+			let origin = vector(element.rotationOrigin);
+			let group = new THREE.Object3D();
+			group.name = element.name || '';
+			group.position.set(origin[0], origin[1], origin[2]);
+			group.rotation.setFromDegreeArray([
+				number(element.rotationX),
+				number(element.rotationY),
+				number(element.rotationZ)
+			]);
+			group.scale.set(
+				number(element.scaleX, 1),
+				number(element.scaleY, 1),
+				number(element.scaleZ, 1)
+			);
+
+			let from = vector(element.from);
+			let to = vector(element.to);
+			let size = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
+			let has_faces = element.faces && Object.keys(element.faces).some(face => element.faces[face]?.enabled !== false);
+			if (has_faces && size.some(axis => Math.abs(axis) > 0.0001)) {
+				let geometry = new THREE.BoxGeometry(Math.abs(size[0]), Math.abs(size[1]), Math.abs(size[2]));
+				let mesh = new THREE.Mesh(geometry, mat);
+				let center = [
+					(from[0] + to[0]) / 2,
+					(from[1] + to[1]) / 2,
+					(from[2] + to[2]) / 2
+				];
+				mesh.geometry.translate(center[0] - origin[0], center[1] - origin[1], center[2] - origin[2]);
+				mesh.name = element.name || '';
+				scope.applyFaceUVs(mesh, element.faces, texture_size);
+				group.add(mesh);
+			}
+
+			if (Array.isArray(element.children)) {
+				element.children.forEach(child => buildElement(child, group));
+			}
+			parent.add(group);
+		}
+
+		if (Array.isArray(shape.elements)) {
+			shape.elements.forEach(element => buildElement(element, this.model));
+		}
+		this.model.name = options.name || this.name;
+		return this;
+	}
 	buildModel(options) {
+		if (options.vintage_story_shape) {
+			return this.buildVintageStoryShapeModel(options);
+		}
 		let {elements, texture, texture_size} = options;
 		if (!texture_size) texture_size = [16, 16];
 		var scope = this;
-		if (texture === 'black') {
-			var mat = new THREE.MeshBasicMaterial({color: 0x101013});
-		} else {
-			var img = new Image();
-			img.src = texture;
-			var tex = new THREE.Texture(img);
-			img.tex = tex;
-			img.tex.magFilter = THREE.NearestFilter;
-			img.tex.minFilter = THREE.NearestFilter;
-			img.onload = function() {
-				this.tex.needsUpdate = true;
-			}
-			img.crossOrigin = '';
-			var mat = new THREE.ShaderMaterial({
-				uniforms: {
-					map: {type: 't', value: tex},
-					SHADE: {type: 'bool', value: settings.shading.value},
-					LIGHTCOLOR: {type: 'vec3', value: new THREE.Color().copy(Canvas.global_light_color).multiplyScalar(settings.brightness.value / 50)},
-					LIGHTSIDE: {type: 'int', value: Canvas.global_light_side},
-					EMISSIVE: {type: 'bool', value: false}
-				},
-				vertexShader: prepareShader(VertShader),
-				fragmentShader: prepareShader(FragShader),
-				side: THREE.DoubleSide,
-				transparent: true
-			});
-			mat.map = tex;
-		}
+		var mat = this.getMaterial(options);
 
 		scope.material = mat
 
@@ -265,48 +384,11 @@ export class refModel {
 			}
 			mesh.name = s.name || '';
 
-			function getUVArray(face) {
-				var arr = [
-					[face.uv[0]/texture_size[0], 1-(face.uv[1]/texture_size[1])],
-					[face.uv[2]/texture_size[0], 1-(face.uv[1]/texture_size[1])],
-					[face.uv[0]/texture_size[0], 1-(face.uv[3]/texture_size[1])],
-					[face.uv[2]/texture_size[0], 1-(face.uv[3]/texture_size[1])]
-				]
-				var rot = (face.rotation+0)
-				while (rot > 0) {
-					let a = arr[0];
-					arr[0] = arr[2];
-					arr[2] = arr[3];
-					arr[3] = arr[1];
-					arr[1] = a;
-					rot = rot-90;
-				}
-				return arr;
-			}
-
-			for (var face in s) {
-				if (s.hasOwnProperty(face) && s[face].uv !== undefined) {
-					var fIndex = 0;
-					switch(face) {
-						case 'north':   fIndex = 10;   break;
-						case 'east':	fIndex = 0;	break;
-						case 'south':   fIndex = 8;	break;
-						case 'west':	fIndex = 2;	break;
-						case 'up':	  fIndex = 4;	break;
-						case 'down':	fIndex = 6;	break;
-					}
-					let uv_array = getUVArray(s[face]);
-					mesh.geometry.attributes.uv.array.set(uv_array[0], fIndex*4 + 0);  //0,1
-					mesh.geometry.attributes.uv.array.set(uv_array[1], fIndex*4 + 2);  //1,1
-					mesh.geometry.attributes.uv.array.set(uv_array[2], fIndex*4 + 4);  //0,0
-					mesh.geometry.attributes.uv.array.set(uv_array[3], fIndex*4 + 6);  //1,0
-					mesh.geometry.attributes.uv.needsUpdate = true;
-				}
-			}
+			scope.applyFaceUVs(mesh, s, texture_size);
 
 			scope.model.add(mesh);
 		})
-		scope.model.name = name;
+		scope.model.name = options.name || scope.name;
 		return this;
 	}
 	setModelVariant(variant) {
@@ -328,8 +410,19 @@ export class refModel {
 		}
 		//3D
 		if (!this.initialized) {
-			for (let model of this.models) {
-				this.buildModel(model);
+			let loaded_asset = this.asset_id ? loadVintageStoryPreviewModel(this.asset_id) : null;
+			let built_asset_model = false;
+			if (loaded_asset?.model) {
+				this.buildModel(loaded_asset.model);
+				built_asset_model = true;
+				warnAboutVintageStoryPreviewAssetLoad(this.asset_id, loaded_asset);
+			} else if (loaded_asset) {
+				warnAboutVintageStoryPreviewAssetLoad(this.asset_id, loaded_asset);
+			}
+			if (!built_asset_model) {
+				for (let model of this.models) {
+					this.buildModel(model);
+				}
 			}
 			this.initialized = true;
 		}
@@ -351,14 +444,17 @@ export const displayReferenceObjects = {
 		// Modified for Vintage Bench on 2026-06-22: expose Vintage Story preview targets without bundling game assets.
 		seraph: new refModel('seraph', {
 			icon: 'accessibility',
+			asset_id: 'seraph',
 			models: []
 		}),
 		vs_armor_stand: new refModel('vs_armor_stand', {
 			icon: 'fa-child',
+			asset_id: 'vs_armor_stand',
 			models: []
 		}),
 		mannequin: new refModel('mannequin', {
 			icon: 'fa-person',
+			asset_id: 'mannequin',
 			models: []
 		}),
 		firstperson: new refModel('firstperson', {
@@ -375,30 +471,37 @@ export const displayReferenceObjects = {
 		}),
 		tongs: new refModel('tongs', {
 			icon: 'build',
+			asset_id: 'tongs',
 			models: [DisplayReferences.monitor]
 		}),
 		tool_rack: new refModel('tool_rack', {
 			icon: 'construction',
+			asset_id: 'tool_rack',
 			models: [DisplayReferences.shelf]
 		}),
 		vertical_rack: new refModel('vertical_rack', {
 			icon: 'view_agenda',
+			asset_id: 'vertical_rack',
 			models: [DisplayReferences.shelf]
 		}),
 		display_case: new refModel('display_case', {
 			icon: 'inventory_2',
+			asset_id: 'display_case',
 			models: [DisplayReferences.block]
 		}),
 		shelf: new refModel('shelf', {
 			icon: 'table_view',
+			asset_id: 'shelf',
 			models: [DisplayReferences.shelf]
 		}),
 		scroll_rack: new refModel('scroll_rack', {
 			icon: 'receipt_long',
+			asset_id: 'scroll_rack',
 			models: [DisplayReferences.shelf]
 		}),
 		antler_mount: new refModel('antler_mount', {
 			icon: 'wall_art',
+			asset_id: 'antler_mount',
 			models: [DisplayReferences.block]
 		}),
 		inventory_nine: new refModel('inventory_nine', {
@@ -415,18 +518,22 @@ export const displayReferenceObjects = {
 		}),
 		trap: new refModel('trap', {
 			icon: 'select_all',
+			asset_id: 'trap',
 			models: [DisplayReferences.block]
 		}),
 		forge: new refModel('forge', {
 			icon: 'local_fire_department',
+			asset_id: 'forge',
 			models: [DisplayReferences.block]
 		}),
 		omok_tabletop: new refModel('omok_tabletop', {
 			icon: 'table_bar',
+			asset_id: 'omok_tabletop',
 			models: [DisplayReferences.shelf]
 		}),
 		firepit: new refModel('firepit', {
 			icon: 'whatshot',
+			asset_id: 'firepit',
 			models: [DisplayReferences.block]
 		})
 	},

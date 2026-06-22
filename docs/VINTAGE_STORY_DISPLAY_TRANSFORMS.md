@@ -126,11 +126,11 @@ The Display editor exposes:
 
 Changing these fields updates the preview immediately through `DisplayMode.updateDisplayBase`. The transform gizmo also keeps display scale uniform. Reset uses neutral Vintage Story values until exact game defaults are sourced.
 
-Preview references are Vintage Story-named: Seraph, Vintage Story armor stand, mannequin, tongs, ground, shelf/rack holders, GUI, trap, forge, Omok tabletop, and firepit. This pass does not bundle Vintage Story assets. The preview uses safe placeholder holder geometry and warns when the configured local Vintage Story asset path is missing required preview files.
+Preview references are Vintage Story-named: Seraph, Vintage Story armor stand, mannequin, tongs, ground, shelf/rack holders, GUI, trap, forge, Omok tabletop, and firepit. This pass does not bundle Vintage Story assets. When `vintage_story_assets_path` points at a local Vintage Story installation, preview references load and convert the matching local shape JSON into cuboid preview geometry. Missing assets, unresolved shape indirection, or unresolved textures fall back to placeholders or neutral preview materials with a warning.
 
 ## TODOs
 
-- Replace placeholder preview rigs with local Vintage Story asset loading.
+- Improve local Vintage Story preview loading with full multi-texture material assignment and runtime variant resolution.
 - Confirm exact default transform presets from `ModelTransform` API or live game export.
 - Calibrate GUI preview against real Vintage Story inventory rendering.
 - Add richer warnings for alias/preview-only contexts in the UI.

@@ -10,6 +10,7 @@ import {
 	applyVintageStoryDisplayTransformsToModel,
 	collectVintageStoryDisplayTransformsFromModel
 } from '../js/display_mode/vintage_story_display_transforms.js';
+import { parseVintageStoryAssetText } from '../js/display_mode/vintage_story_asset_parser.js';
 
 const fixtureRoot = join(process.cwd(), 'test', 'fixtures', 'vintage_story_json');
 
@@ -18,6 +19,21 @@ async function readFixture(name) {
 }
 
 const defaultShape = createDefaultVintageStoryShape();
+const jsonLikeAsset = parseVintageStoryAssetText(`{
+	code: 'preview-test',
+	shape: { base: "block/stone/forge/forge" },
+	variantgroups: [
+		{ code: "type", states: ["normal", "aged",] },
+	],
+	// Vintage Story assets commonly use JSON-like comments.
+	textures: { stone: { base: "block/stone/rock/granite" }, },
+	leadingDecimal: .25,
+}`);
+assert.equal(jsonLikeAsset.code, 'preview-test');
+assert.equal(jsonLikeAsset.shape.base, 'block/stone/forge/forge');
+assert.equal(jsonLikeAsset.variantgroups[0].states[1], 'aged');
+assert.equal(jsonLikeAsset.leadingDecimal, 0.25);
+
 assert.equal(defaultShape.textureWidth, 16);
 assert.equal(defaultShape.textureHeight, 16);
 assert.deepEqual(defaultShape.textures, {texture: ''});
