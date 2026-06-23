@@ -2,8 +2,6 @@
 
 Vintage Bench is a modified fork of [Blockbench](https://github.com/JannisX11/blockbench) focused on becoming a Vintage Story cuboid JSON model editor.
 
-This first cleanup pass keeps the desktop cuboid editor usable while removing hosted web/PWA paths and user-facing Minecraft, Bedrock, mesh, and legacy project workflows. The current project serializer still uses the stable internal Blockbench project payload, but save/open defaults now use `.json` as the external project extension.
-
 Vintage Bench is not affiliated with, endorsed by, or sponsored by the original Blockbench project or by the owners or developers of Vintage Story.
 
 ## Setup
