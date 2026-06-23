@@ -2,7 +2,6 @@
 
 export const VS_DISPLAY_DIRECT_KEYS = [
 	'guiTransform',
-	'fpHandTransform',
 	'tpHandTransform',
 	'tpOffHandTransform',
 	'groundTransform'
@@ -26,13 +25,13 @@ export const VS_DISPLAY_ATTRIBUTE_KEYS = [
 export const VS_DISPLAY_CONTEXTS = [
 	{id: 'tpHandTransform', label: 'Thirdperson Mainhand', section: 'Hands', icon: 'pan_tool', jsonKey: 'tpHandTransform', location: 'root', references: ['seraph', 'mannequin', 'vs_armor_stand']},
 	{id: 'tpOffHandTransform', label: 'Thirdperson Offhand', section: 'Hands', icon: 'pan_tool', jsonKey: 'tpOffHandTransform', location: 'root', references: ['seraph', 'mannequin', 'vs_armor_stand']},
-	{id: 'fpHandTransform', label: 'Firstperson Mainhand', section: 'Hands', icon: 'person', jsonKey: 'fpHandTransform', location: 'root', references: ['firstperson']},
-	{id: 'fpOffHandTransform', label: 'Firstperson Offhand', section: 'Hands', icon: 'person', jsonKey: 'fpHandTransform', location: 'root', aliasOf: 'fpHandTransform', references: ['firstperson']},
+	{id: 'fpHandTransform', label: 'Firstperson Mainhand', section: 'Hands', icon: 'person', jsonKey: 'tpHandTransform', location: 'root', aliasOf: 'tpHandTransform', references: ['firstperson']},
+	{id: 'fpOffHandTransform', label: 'Firstperson Offhand', section: 'Hands', icon: 'person', jsonKey: 'tpOffHandTransform', location: 'root', aliasOf: 'tpOffHandTransform', references: ['firstperson']},
 	{id: 'onTongTransform', label: 'On tongs', section: 'Hands', icon: 'construction', jsonKey: 'onTongTransform', location: 'attributes', references: ['tongs']},
 
 	{id: 'groundTransform', label: 'Ground', section: 'Ground', icon: 'public', jsonKey: 'groundTransform', location: 'root', references: ['ground']},
 	{id: 'groundStorageTransform', label: 'Placed on ground', section: 'Ground', icon: 'inventory_2', jsonKey: 'groundStorageTransform', location: 'attributes', references: ['ground_storage']},
-	{id: 'onAntlerMountTransform', label: 'On antler mount', section: 'Ground', icon: 'wall_art', jsonKey: 'onAntlerMountTransform', location: 'attributes', references: ['antler_mount']},
+	{id: 'onAntlerMountTransform', label: 'On antler mount', section: 'Ground', icon: 'wall_art', jsonKey: 'onAntlerMountTransform', location: 'attributes', references: ['mount', 'antler_mount', 'backdrop']},
 
 	{id: 'toolrackTransform', label: 'On tool rack', section: 'Shelf / Rack', icon: 'construction', jsonKey: 'toolrackTransform', location: 'attributes', references: ['tool_rack']},
 	{id: 'onmoldrackTransform', label: 'On vertical rack', section: 'Shelf / Rack', icon: 'view_agenda', jsonKey: 'onmoldrackTransform', location: 'attributes', references: ['vertical_rack']},
@@ -40,7 +39,7 @@ export const VS_DISPLAY_CONTEXTS = [
 	{id: 'onshelfTransform', label: 'On shelf', section: 'Shelf / Rack', icon: 'table_view', jsonKey: 'onshelfTransform', location: 'attributes', references: ['shelf']},
 	{id: 'onscrollrackTransform', label: 'On scroll rack', section: 'Shelf / Rack', icon: 'receipt_long', jsonKey: 'onscrollrackTransform', location: 'attributes', references: ['scroll_rack']},
 
-	{id: 'guiTransform', label: 'GUI', section: 'GUI', icon: 'border_style', jsonKey: 'guiTransform', location: 'root', references: ['inventory_full', 'hud']},
+	{id: 'guiTransform', label: 'GUI', section: 'GUI', icon: 'border_style', jsonKey: 'guiTransform', location: 'root', references: ['inventory_full', 'hud', 'backdrop']},
 
 	{id: 'seraphPreviewTransform', label: 'Seraph preview', section: 'Entity / Armor', icon: 'accessibility', previewOnly: true, references: ['seraph']},
 	{id: 'armorStandPreviewTransform', label: 'Armor stand preview', section: 'Entity / Armor', icon: 'accessibility', previewOnly: true, references: ['vs_armor_stand']},
@@ -48,7 +47,7 @@ export const VS_DISPLAY_CONTEXTS = [
 
 	{id: 'inTrapTransform', label: 'In traps', section: 'Other', icon: 'select_all', jsonKey: 'inTrapTransform', location: 'attributes', references: ['trap']},
 	{id: 'inForgeTransform', label: 'In forge', section: 'Other', icon: 'local_fire_department', jsonKey: 'inForgeTransform', location: 'attributes', references: ['forge']},
-	{id: 'onOmokTransform', label: 'On omak tabletop', section: 'Other', icon: 'table_bar', jsonKey: 'onOmokTransform', location: 'attributes', references: ['omok_tabletop']},
+	{id: 'onOmokTransform', label: 'On omok tabletop', section: 'Other', icon: 'table_bar', jsonKey: 'onOmokTransform', location: 'attributes', references: ['omok_tabletop']},
 	{id: 'infirepitTransform', label: 'In firepit', section: 'Other', icon: 'whatshot', jsonKey: 'infirepitTransform', location: 'attributes', references: ['firepit']},
 ];
 
@@ -126,6 +125,13 @@ function addWarning(warnings, message) {
 
 export function getVintageStoryDisplayContext(id) {
 	return VS_DISPLAY_CONTEXTS.find(context => context.id === id || context.jsonKey === id);
+}
+
+export function getVintageStoryDisplaySlotId(context_or_id) {
+	let context = typeof context_or_id === 'string'
+		? getVintageStoryDisplayContext(context_or_id)
+		: context_or_id;
+	return context?.aliasOf || context?.id || context_or_id;
 }
 
 export function getVintageStoryDisplayContextByJsonKey(jsonKey, location) {
@@ -241,9 +247,5 @@ export function applyVintageStoryDisplayTransformsToModel(model, displaySettings
 			model[context.jsonKey] = transform;
 		}
 	});
-	let first_person_alias = displaySettings.fpOffHandTransform;
-	if (!displaySettings.fpHandTransform && displaySlotHasVintageStoryTransform(first_person_alias)) {
-		model.fpHandTransform = displaySlotToVintageStoryTransform(first_person_alias);
-	}
 	return model;
 }

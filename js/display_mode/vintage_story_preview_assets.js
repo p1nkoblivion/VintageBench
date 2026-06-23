@@ -14,6 +14,7 @@ export const VS_PREVIEW_ASSETS = [
 	{id: 'display_case', label: 'Display case', path: 'assets/survival/blocktypes/wood/displaycase.json', variantDefaults: {type: 'generic'}},
 	{id: 'shelf', label: 'Shelf', path: 'assets/survival/blocktypes/wood/shelf.json'},
 	{id: 'scroll_rack', label: 'Scroll rack', path: 'assets/survival/blocktypes/wood/woodtyped/scrollrack.json', variantDefaults: {material: 'aged', type: 'normal'}},
+	{id: 'mount', label: 'Mount', path: 'assets/survival/blocktypes/wood/woodtyped/antlermount.json', variantDefaults: {material: 'aged', type: 'square'}},
 	{id: 'antler_mount', label: 'Antler mount', path: 'assets/survival/blocktypes/wood/woodtyped/antlermount.json', variantDefaults: {material: 'aged', type: 'square'}},
 	{id: 'trap', label: 'Trap crate', path: 'assets/survival/blocktypes/wood/trapcrate.json', variantDefaults: {type: 'wood'}},
 	{id: 'forge', label: 'Forge', path: 'assets/survival/blocktypes/stone/generic/forge.json'},
@@ -225,6 +226,57 @@ function resolveTextureFiles(root, asset, asset_object, shape, source_path, shap
 	return {texture_paths, texture_urls};
 }
 
+function numericVector(value) {
+	if (!Array.isArray(value) || value.length < 3) return null;
+	let vector = value.slice(0, 3).map(number => typeof number === 'number' && isFinite(number) ? number : 0);
+	return vector;
+}
+
+function collectShapeElements(elements, output = []) {
+	if (!Array.isArray(elements)) return output;
+	for (let element of elements) {
+		if (!element || typeof element !== 'object') continue;
+		output.push(element);
+		collectShapeElements(element.children, output);
+	}
+	return output;
+}
+
+function isPlacementSurfaceElement(element) {
+	return /^psurface/i.test(String(element?.name || ''));
+}
+
+function makeSurfaceReferenceBase(element, y_mode = 'top') {
+	let from = numericVector(element?.from);
+	let to = numericVector(element?.to);
+	if (!from || !to) return null;
+	let surface_y = y_mode === 'from' ? from[1] : to[1];
+	return [
+		(from[0] + to[0]) / 2,
+		surface_y + 8,
+		(from[2] + to[2]) / 2,
+		0, 0, 0,
+		1, 1, 1
+	];
+}
+
+function getPlacementSurfaceReferenceBase(shape) {
+	let placement_surface = collectShapeElements(shape?.elements).find(isPlacementSurfaceElement);
+	return placement_surface ? makeSurfaceReferenceBase(placement_surface, 'from') : null;
+}
+
+function getShelfReferenceBase(shape) {
+	let lower_shelf = collectShapeElements(shape?.elements).find(element => /lower\s+shelf/i.test(String(element?.name || '')));
+	return lower_shelf ? makeSurfaceReferenceBase(lower_shelf, 'top') : null;
+}
+
+function getPreviewReferenceBase(asset_id, shape) {
+	let placement_surface = getPlacementSurfaceReferenceBase(shape);
+	if (placement_surface) return placement_surface;
+	if (asset_id === 'shelf') return getShelfReferenceBase(shape);
+	return null;
+}
+
 export function loadVintageStoryPreviewModel(asset_id) {
 	let root = getVintageStoryAssetRoot();
 	let asset = getPreviewAsset(asset_id);
@@ -266,6 +318,7 @@ export function loadVintageStoryPreviewModel(asset_id) {
 				vintage_story_shape: resolved_shape.shape,
 				texture: texture_path ? pathToFileUrl(texture_path) : null,
 				texture_urls: texture_files.texture_urls,
+				reference_base: getPreviewReferenceBase(asset_id, resolved_shape.shape),
 				texture_size: [
 					resolved_shape.shape.textureWidth || 16,
 					resolved_shape.shape.textureHeight || 16

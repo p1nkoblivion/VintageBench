@@ -1,0 +1,6 @@
+{
+  "textureWidth": 16,
+  "textureHeight": 16,
+  "textures": { "outside": { "base": "item/bytype/blue" } },
+  "elements": [{ "name": "Blue", "from": [0, 0, 0], "to": [5, 5, 5], "faces": { "north": { "texture": "#outside", "uv": [0, 0, 5, 5] } } }]
+}

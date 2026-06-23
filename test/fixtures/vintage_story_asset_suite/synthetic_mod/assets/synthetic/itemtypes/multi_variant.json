@@ -1,0 +1,15 @@
+{
+  code: "multivariant",
+  variantgroups: [
+    { code: "color", states: ["red", "blue"] },
+    { code: "size", states: ["small", "large"] },
+  ],
+  shapeByType: {
+    "multivariant-red-small": { base: "item/variant/small-red" },
+    "*": { base: "item/variant/default" },
+  },
+  texturesByType: {
+    "multivariant-red-*": { outside: { base: "item/bytype/red" } },
+    "*": { outside: { base: "item/bytype/{color}" } },
+  },
+}

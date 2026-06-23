@@ -1,0 +1,24 @@
+{
+  code: "bytype-texture",
+  variantgroups: [
+    { code: "color", states: ["red", "blue", "green"] },
+  ],
+  shape: { base: "block/multi-texture" },
+  textures: {
+    trim: { base: "item/bytype/trim" },
+  },
+  texturesByType: {
+    "bytype-texture-red": {
+      outside: { base: "item/bytype/red" },
+      inside: { base: "item/bytype/red-inside" },
+    },
+    "bytype-texture-b*": {
+      outside: { base: "item/bytype/blue" },
+      inside: { base: "item/bytype/blue-inside" },
+    },
+    "*": {
+      outside: { base: "item/bytype/fallback" },
+      inside: { base: "item/bytype/fallback-inside" },
+    },
+  },
+}

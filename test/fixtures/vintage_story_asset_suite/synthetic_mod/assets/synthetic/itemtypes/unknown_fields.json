@@ -1,0 +1,26 @@
+{
+  code: "unknown-fields",
+  shape: { base: "block/unknown-fields", keepShapeExtra: true },
+  textures: {
+    outside: { base: "block/unknown", keepTextureExtra: true },
+  },
+  attributes: {
+    keepUnknownAttribute: {
+      nested: true,
+    },
+  },
+  behaviors: [
+    {
+      name: "GroundStorable",
+      properties: {
+        selectionBox: { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.1, z2: 1 },
+        collisionBox: { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.1, z2: 1 },
+        keepUnknownBehaviorProperty: "preserve",
+      },
+      keepUnknownBehaviorRoot: true,
+    },
+  ],
+  keepUnknownRoot: {
+    nested: true,
+  },
+}

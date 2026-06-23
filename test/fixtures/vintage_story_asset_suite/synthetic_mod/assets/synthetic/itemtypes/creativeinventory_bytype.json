@@ -1,0 +1,16 @@
+{
+  code: "creative-bytype",
+  variantgroups: [
+    { code: "color", states: ["red", "blue"] },
+  ],
+  shape: { base: "item/variant/default" },
+  creativeinventoryByType: {
+    "creative-bytype-red": {
+      general: ["creative-bytype-red"],
+      decorative: ["creative-bytype-red"],
+    },
+    "*": {
+      general: ["*"],
+    },
+  },
+}

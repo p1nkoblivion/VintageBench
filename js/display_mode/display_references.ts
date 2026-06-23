@@ -664,6 +664,12 @@ const DisplayReferences = {
 			{"size": [16,16,16], "pos": [8, -7.98, 8], "origin": [0, 0, 0], "north":{"uv":[0,0,16,16]},"east":{"uv":[0,0,16,16]},"south":{"uv":[0,0,16,16]},"west":{"uv":[0,0,16,16]},"up":{"uv":[0,0,16,16]},"down":{"uv":[0,0,16,16]}}
 		]
 	},
+	backdrop: {
+		texture: 'black',
+		elements: [
+			{"size": [32,32,0.1], "pos": [0, 0, -32], "origin": [0, 0, 0], "north":{"uv":[0,0,16,16]},"east":{"uv":[0,0,16,16]},"south":{"uv":[0,0,16,16]},"west":{"uv":[0,0,16,16]},"up":{"uv":[0,0,16,16]},"down":{"uv":[0,0,16,16]}}
+		]
+	},
 	frame_block: {
 		texture: 'assets/missing.png',
 		elements: [
@@ -733,4 +739,3 @@ const DisplayReferences = {
 	}
 };
 export default DisplayReferences;
-

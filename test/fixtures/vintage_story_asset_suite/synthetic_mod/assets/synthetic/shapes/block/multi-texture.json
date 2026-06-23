@@ -1,0 +1,21 @@
+{
+  "textureWidth": 32,
+  "textureHeight": 16,
+  "textures": {
+    "outside": { "base": "block/outside" },
+    "inside": { "base": "block/inside" },
+    "trim": { "base": "block/trim" }
+  },
+  "elements": [
+    {
+      "name": "MultiTextureBody",
+      "from": [1, 0, 1],
+      "to": [15, 12, 15],
+      "faces": {
+        "north": { "texture": "#outside", "uv": [0, 0, 14, 12] },
+        "south": { "texture": "#inside", "uv": [0, 0, 14, 12] },
+        "up": { "texture": "#trim", "uv": [0, 0, 14, 14] }
+      }
+    }
+  ]
+}

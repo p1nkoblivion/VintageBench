@@ -63,9 +63,8 @@ export const MenuBar = {
 	setup() {
 		MenuBar.menues = MenuBar.menus;
 		new BarMenu('file', [
-			new MenuSeparator('file_options'),
 			'project_window',
-			new MenuSeparator('open'),
+			new MenuSeparator('new'),
 			{name: 'menu.file.new', id: 'new', icon: 'insert_drive_file',
 				children: function() {
 					let arr = [];
@@ -143,43 +142,20 @@ export const MenuBar = {
 					return arr
 				}
 			},
-			'open_model',
 			'new_window',
-			new MenuSeparator('project'),
+			new MenuSeparator('model'),
+			'open_model',
 			'save_project',
 			'save_project_as',
 			'save_project_incremental',
-			'close_project',
-			new MenuSeparator('import_export'),
-			{name: 'menu.file.import', id: 'import', icon: 'insert_drive_file', condition: () => Format && !Format.pose_mode, children: [
-				{
-					id: 'import_open_project',
-					name: 'menu.file.import.import_open_project',
-					icon: 'input',
-					condition: () => Project && ModelProject.all.length > 1,
-					children() {
-						let projects = [];
-						ModelProject.all.forEach(project => {
-							if (project == Project) return;
-							projects.push({
-								name: project.getDisplayName(true),
-								icon: project.format.icon,
-								description: project.path,
-								click() {
-									let current_project = Project;
-									project.select();
-									let bbmodel = Codecs.project.compile();
-									current_project.select();
-									Codecs.project.merge(JSON.parse(bbmodel));
-								}
-							})
-						})
-						return projects;
-					}
-				},
-				'import_project'
-			]},
-			'export_over',
+			new MenuSeparator('asset'),
+			'open_vintage_story_asset',
+			'save_vintage_story_asset_context',
+			'save_vintage_story_asset',
+			new MenuSeparator('workspace'),
+			'vintage_story_workspace_settings',
+			'validate_vintage_story_mod_workspace',
+			'package_vintage_story_mod',
 			new MenuSeparator('options'),
 			{name: 'menu.file.preferences', id: 'preferences', icon: 'tune', children: [
 				'settings_window',
@@ -217,7 +193,8 @@ export const MenuBar = {
 				}
 			]},
 			'plugins_window',
-			'edit_session'
+			'edit_session',
+			'close_project'
 		], {icon: 'draft'})
 		new BarMenu('edit', [
 			new MenuSeparator('undo'),
@@ -226,7 +203,6 @@ export const MenuBar = {
 			'edit_history',
 			new MenuSeparator('add_element'),
 			'add_element',
-			'add_group',
 			new MenuSeparator('modify_elements'),
 			'duplicate',
 			'rename',

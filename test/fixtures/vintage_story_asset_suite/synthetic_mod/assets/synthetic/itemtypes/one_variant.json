@@ -1,0 +1,11 @@
+{
+  code: "onevariant",
+  variantgroups: [
+    { code: "color", states: ["red", "blue", "green"] },
+  ],
+  shape: { base: "item/variant/default" },
+  texturesByType: {
+    "onevariant-red": { outside: { base: "item/bytype/red" } },
+    "*": { outside: { base: "item/bytype/{color}" } },
+  },
+}

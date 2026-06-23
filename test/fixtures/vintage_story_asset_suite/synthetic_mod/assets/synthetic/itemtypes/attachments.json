@@ -1,0 +1,24 @@
+{
+  code: "attachable",
+  variantgroups: [
+    { code: "style", states: ["tool", "weapon"] },
+  ],
+  shape: { base: "item/simple-item" },
+  attributesByType: {
+    "attachable-weapon": {
+      attachableToEntity: {
+        categoryCode: "weapon1m",
+        attachedShapeBySlotCode: {
+          frontrightside: { base: "item/wearable/right", keepSlotExtra: true },
+          frontleftside: { base: "item/wearable/left" },
+        },
+        keepAttachmentExtra: { nested: true },
+      },
+    },
+    "*": {
+      attachableToEntity: {
+        categoryCode: "toolholding",
+      },
+    },
+  },
+}

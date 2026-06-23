@@ -9,7 +9,8 @@ import { prepareShader } from "../shaders/shader";
 import {
 	VS_DISPLAY_CONTEXTS,
 	createNeutralVintageStoryDisplaySlot,
-	getVintageStoryDisplayContext
+	getVintageStoryDisplayContext,
+	getVintageStoryDisplaySlotId
 } from "./vintage_story_display_transforms";
 import {
 	loadVintageStoryPreviewModel,
@@ -26,6 +27,7 @@ let display_base = null;
 
 export const DisplayMode = {
 	display_slot: 'tpHandTransform',
+	active_context: 'tpHandTransform',
 	animate_preview: true,
 };
 
@@ -145,9 +147,11 @@ const VINTAGE_REFERENCE_BASES = {
 	tool_rack: [8, 8, 12, 0, 180, 0, 0.5, 0.5, 0.5],
 	vertical_rack: [8, 8, 12, 0, 180, 0, 0.5, 0.5, 0.5],
 	display_case: [8, 7, 8, 0, 0, 0, 0.6, 0.6, 0.6],
-	shelf: [8, 7.75, 12, 0, 180, 0, 0.5, 0.5, 0.5],
+	shelf: [8, 10, 6.5, 0, 0, 0, 1, 1, 1],
 	scroll_rack: [8, 8, 12, 0, 180, 0, 0.5, 0.5, 0.5],
+	mount: [8, 9, 12, 0, 180, 0, 0.5, 0.5, 0.5],
 	antler_mount: [8, 9, 12, 0, 180, 0, 0.5, 0.5, 0.5],
+	backdrop: [0, 0, 0, 0, 0, 0, 1, 1, 1],
 	inventory_full: [0, 0, 0, 0, 0, 0, 1, 1, 1],
 	hud: [0, 0, 0, 0, 0, 0, 1, 1, 1],
 	trap: [8, 5, 8, 0, 0, 0, 0.6, 0.6, 0.6],
@@ -173,15 +177,22 @@ const VINTAGE_GUI_REFERENCE_IMAGES = {
 	}
 };
 
+const VINTAGE_DISPLAY_SLOT_IDS = Array.from(new Set(VS_DISPLAY_CONTEXTS
+	.filter(context => !context.previewOnly)
+	.map(context => getVintageStoryDisplaySlotId(context))));
+
+function getDisplayReferenceContextKey() {
+	return DisplayMode.active_context || DisplayMode.display_slot;
+}
+
 
 
 // Modified for Vintage Bench on 2026-06-22: replace Minecraft display presets with a single neutral Vintage Story transform preset.
 display_presets = [{
 	id: 'vintage_story_neutral',
 	fixed: true,
-	areas: Object.fromEntries(VS_DISPLAY_CONTEXTS
-		.filter(context => !context.previewOnly)
-		.map(context => [context.id, {
+	areas: Object.fromEntries(VINTAGE_DISPLAY_SLOT_IDS
+		.map(id => [id, {
 			rotation: [0, 0, 0],
 			translation: [0, 0, 0],
 			origin: [0, 0, 0],
@@ -193,8 +204,8 @@ if (localStorage.getItem('display_presets') != null) {
 	stored_display_presets.forEach(preset => {
 		if (!preset?.areas) return;
 		let filtered_areas = {};
-		VS_DISPLAY_CONTEXTS.forEach(context => {
-			if (preset.areas[context.id]) filtered_areas[context.id] = preset.areas[context.id];
+		VINTAGE_DISPLAY_SLOT_IDS.forEach(slot_id => {
+			if (preset.areas[slot_id]) filtered_areas[slot_id] = preset.areas[slot_id];
 		});
 		if (Object.keys(filtered_areas).length) {
 			display_presets.push({
@@ -219,21 +230,15 @@ export class refModel {
 		this.gui_reference = options.gui_reference;
 		this.condition = options.condition;
 		this.initialized = false;
+		this.reference_base = options.reference_base;
 		this.pose_angles = {};
 
-		if (VINTAGE_REFERENCE_BASES[id]) {
-			this.updateBasePosition = function() {
-				// Modified for Vintage Bench on 2026-06-22: use neutral Vintage Story placeholder placement until local game shapes are converted for preview.
-				let base = VINTAGE_REFERENCE_BASES[id] || VINTAGE_REFERENCE_BASES.default;
-				setDisplayArea(...base);
-			}
-		}
-		if (!this.updateBasePosition) {
-			this.updateBasePosition = function() {
-				// Modified for Vintage Bench on 2026-06-22: use neutral Vintage Story placeholder placement until local game shapes are converted for preview.
-				let base = VINTAGE_REFERENCE_BASES[id] || VINTAGE_REFERENCE_BASES.default;
-				setDisplayArea(...base);
-			}
+		this.updateBasePosition = function() {
+			// Modified for Vintage Bench on 2026-06-22: Vintage Story holder previews may provide a placement-surface anchor from the loaded game asset.
+			let base = Array.isArray(scope.reference_base)
+				? scope.reference_base
+				: (VINTAGE_REFERENCE_BASES[id] || VINTAGE_REFERENCE_BASES.default);
+			setDisplayArea(...base);
 		}
 	}
 	getMaterial(options) {
@@ -365,6 +370,9 @@ export class refModel {
 		let texture_size = options.texture_size || [shape.textureWidth || 16, shape.textureHeight || 16];
 		let scope = this;
 		let material_cache = {};
+		if (Array.isArray(options.reference_base)) {
+			this.reference_base = options.reference_base;
+		}
 		this.material = this.getMaterial(options);
 
 		function vector(value, fallback = [0, 0, 0]) {
@@ -392,6 +400,7 @@ export class refModel {
 			return ['east', 'west', 'up', 'down', 'south', 'north'].map(face => getFaceMaterial(faces?.[face]));
 		}
 		function buildElement(element, parent) {
+			if (/^psurface/i.test(String(element?.name || ''))) return;
 			let origin = vector(element.rotationOrigin);
 			let from = vector(element.from);
 			let to = vector(element.to);
@@ -507,7 +516,8 @@ export class refModel {
 		}
 	}
 	load(index) {
-		displayReferenceObjects.ref_indexes[DisplayMode.display_slot] = index || 0;
+		let reference_key = getDisplayReferenceContextKey();
+		displayReferenceObjects.ref_indexes[reference_key] = index || 0;
 		displayReferenceObjects.clear()
 		if (typeof this.updateBasePosition === 'function') {
 			this.updateBasePosition()
@@ -536,11 +546,14 @@ export class refModel {
 				}
 			}
 			this.initialized = true;
+			if (typeof this.updateBasePosition === 'function') {
+				this.updateBasePosition()
+			}
 		}
 		scene.add(this.model)
 		displayReferenceObjects.active = this;
 
-		DisplayMode.vue.pose_angle = this.pose_angles[DisplayMode.display_slot] || 0;
+		DisplayMode.vue.pose_angle = this.pose_angles[reference_key] || 0;
 		DisplayMode.vue.reference_model = this.id;
 
 		if (DisplayMode.display_slot == 'groundTransform') {
@@ -615,6 +628,15 @@ export const displayReferenceObjects = {
 			asset_id: 'antler_mount',
 			models: [DisplayReferences.block]
 		}),
+		mount: new refModel('mount', {
+			icon: 'wall_art',
+			asset_id: 'mount',
+			models: [DisplayReferences.frame]
+		}),
+		backdrop: new refModel('backdrop', {
+			icon: 'crop_landscape',
+			models: [DisplayReferences.backdrop]
+		}),
 		inventory_full: new refModel('inventory_full', {
 			icon: 'icon-inventory_full',
 			gui_reference: VINTAGE_GUI_REFERENCE_IMAGES.inventory_full,
@@ -650,7 +672,7 @@ export const displayReferenceObjects = {
 	bar: function(buttons) {
 		buttons = buttons.filter(id => Condition(this.refmodels[id]));
 		$('#display_ref_bar').html('');
-		let selected_index = displayReferenceObjects.ref_indexes[DisplayMode.display_slot] || 0;
+		let selected_index = displayReferenceObjects.ref_indexes[getDisplayReferenceContextKey()] || 0;
 		if (selected_index >= buttons.length) selected_index = 0;
 		if (buttons.length < 2) {
 			$('.reference_model_bar').css('visibility', 'hidden')
@@ -694,7 +716,7 @@ export const displayReferenceObjects = {
 		displayReferenceObjects.active = false
 	},
 	ref_indexes: Object.fromEntries(VS_DISPLAY_CONTEXTS.map(context => [context.id, 0])),
-	slots: VS_DISPLAY_CONTEXTS.map(context => context.id)
+	slots: VINTAGE_DISPLAY_SLOT_IDS
 }
 
 display_area = new THREE.Object3D();
@@ -737,7 +759,7 @@ export function enterDisplaySettings() {		//Enterung Display Setting Mode, chang
 	scene.position.set(0, 0, 0);
 
 	resizeWindow() //Update panels and sidebars so that the camera can be loaded with the correct aspect ratio
-	DisplayMode.load(DisplayMode.display_slot)
+	DisplayMode.load(DisplayMode.active_context || DisplayMode.display_slot)
 
 	display_area.updateMatrixWorld()
 	Transformer.center()
@@ -839,6 +861,7 @@ DisplayMode.applyPreset = function(preset, all) {
 		}
 	})
 	DisplayMode.updateDisplayBase()
+	slots.forEach(slot_id => DisplayMode.markVintageStoryAssetTransformEdited(slot_id));
 	Undo.finishEdit('Apply display preset')
 }
 DisplayMode.loadJSON = function(data) {
@@ -847,6 +870,126 @@ DisplayMode.loadJSON = function(data) {
 			Project.display_settings[slot] = new DisplaySlot(slot).extend(data[slot])
 		}
 	}
+}
+
+function getVintageStoryAssetContext() {
+	return Project?.vintage_story_data?.asset_context;
+}
+
+function getVintageStoryAssetSlot(slot_id = DisplayMode.display_slot) {
+	return Project?.display_settings?.[slot_id];
+}
+
+function getVintageStoryAssetSource(slot_id = DisplayMode.display_slot) {
+	return getVintageStoryAssetSlot(slot_id)?.vintage_story?.asset_source || null;
+}
+
+function getVintageStoryAssetSourcePath(source) {
+	if (!source) return '';
+	if (source.editMode === 'override' && source.sourceMapPath && source.selectedVariantKey) {
+		return `${source.sourceMapPath}[${JSON.stringify(source.selectedVariantKey)}]`;
+	}
+	if (source.editMode === 'shared' && source.sourceMapPath && source.editTargetKey) {
+		return `${source.sourceMapPath}[${JSON.stringify(source.editTargetKey)}]`;
+	}
+	return source.sourcePath || source.sourceMapPath || '';
+}
+
+DisplayMode.hasVintageStoryAssetContext = function() {
+	return !!getVintageStoryAssetContext()?.source_file_path;
+}
+
+DisplayMode.isRawVintageStoryShapeMode = function() {
+	return !!Project?.vintage_story_data && !DisplayMode.hasVintageStoryAssetContext();
+}
+
+DisplayMode.getVintageStoryAssetSource = getVintageStoryAssetSource;
+
+DisplayMode.describeVintageStoryAssetSource = function(slot_id = DisplayMode.display_slot) {
+	let source = getVintageStoryAssetSource(slot_id);
+	if (!source) return null;
+	let path = getVintageStoryAssetSourcePath(source);
+	let label = 'direct';
+	if (source.deleteOverride) {
+		label = 'override deletion pending';
+	} else if (source.editMode === 'override') {
+		label = 'override pending';
+	} else if (source.editMode === 'shared') {
+		label = source.fallback ? 'editing shared fallback' : 'editing shared wildcard';
+	} else if (source.exact) {
+		label = 'exact';
+	} else if (source.fallback) {
+		label = 'fallback';
+	} else if (source.inherited) {
+		label = 'wildcard';
+	}
+	return {label, path};
+}
+
+DisplayMode.ensureVintageStoryAssetTransformEditTarget = function(mode = 'override', slot_id = DisplayMode.display_slot) {
+	let source = getVintageStoryAssetSource(slot_id);
+	if (!source?.isAssetContext) return null;
+	if (source.deleteOverride && mode !== 'delete') source.deleteOverride = false;
+	if (!source.isByType) {
+		source.editMode = 'direct';
+		source.dirty = true;
+		return source;
+	}
+	if (mode !== 'shared' && source.editMode === 'shared') {
+		mode = 'shared';
+	}
+	if (mode === 'shared') {
+		source.editTargetKey = source.matchedPattern || source.editTargetKey || source.selectedVariantKey;
+		source.editMode = 'shared';
+		source.dirty = true;
+		return source;
+	}
+	if (mode === 'delete') {
+		source.deleteOverride = true;
+		source.dirty = true;
+		return source;
+	}
+	if (!source.exact || source.inherited || !source.editTargetKey || source.editMode === 'override') {
+		if (source.inherited && !source.inheritedFromPattern) {
+			source.inheritedFromPattern = source.matchedPattern;
+		}
+		source.editTargetKey = source.selectedVariantKey;
+		source.editMode = 'override';
+		source.exact = true;
+		source.inherited = false;
+		source.fallback = false;
+		source.pendingOverride = true;
+		source.matchedPattern = source.selectedVariantKey;
+		source.sourcePath = `${source.sourceMapPath}[${JSON.stringify(source.selectedVariantKey)}]`;
+	}
+	source.dirty = true;
+	return source;
+}
+
+DisplayMode.markVintageStoryAssetTransformEdited = function(slot_id = DisplayMode.display_slot, mode = 'override') {
+	return DisplayMode.ensureVintageStoryAssetTransformEditTarget(mode, slot_id);
+}
+
+DisplayMode.createVintageStoryAssetTransformOverride = function(slot_id = DisplayMode.display_slot) {
+	let source = DisplayMode.ensureVintageStoryAssetTransformEditTarget('override', slot_id);
+	if (!source) return;
+	Blockbench.showQuickMessage(`Transform edits will save to ${source.selectedVariantKey}.`, 2500);
+	if (DisplayMode.vue) DisplayMode.vue.$forceUpdate();
+}
+
+DisplayMode.editVintageStoryAssetSharedRule = function(slot_id = DisplayMode.display_slot) {
+	let source = DisplayMode.ensureVintageStoryAssetTransformEditTarget('shared', slot_id);
+	if (!source) return;
+	Blockbench.showQuickMessage(`Transform edits will save to shared rule ${source.editTargetKey}.`, 2500);
+	if (DisplayMode.vue) DisplayMode.vue.$forceUpdate();
+}
+
+DisplayMode.deleteVintageStoryAssetTransformOverride = function(slot_id = DisplayMode.display_slot) {
+	let source = getVintageStoryAssetSource(slot_id);
+	if (!source?.isByType || source.inherited || !source.selectedVariantKey) return;
+	DisplayMode.ensureVintageStoryAssetTransformEditTarget('delete', slot_id);
+	Blockbench.showQuickMessage(`Override ${source.selectedVariantKey} will be removed on save.`, 3000);
+	if (DisplayMode.vue) DisplayMode.vue.$forceUpdate();
 }
 
 var setDisplayArea = DisplayMode.setBase = function(x, y, z, rx, ry, rz, sx, sy, sz) {//Sets the Work Area to the given Space
@@ -882,7 +1025,10 @@ DisplayMode.updateGUILight = function() {
 } 
 
 export function loadDisp(key) {	//Loads The Menu and slider values, common for all Radio Buttons
-	DisplayMode.display_slot = key
+	let context = getVintageStoryDisplayContext(key);
+	let slot_id = getVintageStoryDisplaySlotId(context || key);
+	DisplayMode.active_context = context?.id || slot_id;
+	DisplayMode.display_slot = slot_id
 
 	if (key !== 'gui' && display_preview.isOrtho === true) {
 		display_preview.loadAnglePreset(display_angle_preset)
@@ -893,12 +1039,12 @@ export function loadDisp(key) {	//Loads The Menu and slider values, common for a
 	if (display_preview.orbit_gizmo) display_preview.orbit_gizmo.unhide();
 	display_preview.camPers.setFocalLength(45)
 
-	if (Project.display_settings[key] == undefined) {
-		Project.display_settings[key] = new DisplaySlot(key)
+	if (Project.display_settings[slot_id] == undefined) {
+		Project.display_settings[slot_id] = new DisplaySlot(slot_id)
 	}
 	display_preview.force_locked_angle = false;
-	DisplayMode.vue._data.slot = Project.display_settings[key]
-	DisplayMode.slot = Project.display_settings[key]
+	DisplayMode.vue._data.slot = Project.display_settings[slot_id]
+	DisplayMode.slot = Project.display_settings[slot_id]
 	DisplayMode.vue.$forceUpdate();
 	DisplayMode.updateDisplayBase();
 	Canvas.updateRenderSides();
@@ -970,13 +1116,16 @@ DisplayMode.copy = function() {
 }
 DisplayMode.paste = function() {
 	Undo.initEdit({display_slots: [DisplayMode.display_slot]})
+	DisplayMode.ensureVintageStoryAssetTransformEditTarget();
 	DisplayMode.slot.extend(Clipbench.display_slot)
 	DisplayMode.updateDisplayBase()
+	DisplayMode.markVintageStoryAssetTransformEdited();
 	Undo.finishEdit('Paste display slot')
 }
 
 DisplayMode.scrollSlider = function(type, value, el) {
 	Undo.initEdit({display_slots: [DisplayMode.display_slot]})
+	DisplayMode.ensureVintageStoryAssetTransformEditTarget();
 
 	var [channel, axis] = type.split('.')
 	if (channel === 'scale') {
@@ -989,6 +1138,7 @@ DisplayMode.scrollSlider = function(type, value, el) {
 	}
 
 	DisplayMode.slot.update()
+	DisplayMode.markVintageStoryAssetTransformEdited();
 	Undo.finishEdit('Change display slot')
 }
 
@@ -1106,6 +1256,7 @@ new TransformerModule('display', {
 	},
 	onStart() {
 		Undo.initEdit({display_slots: [DisplayMode.display_slot]})
+		DisplayMode.ensureVintageStoryAssetTransformEditTarget();
 	},
 	onMove(context) {
 		let {point, axis, axis_number, value} = context;
@@ -1144,6 +1295,7 @@ new TransformerModule('display', {
 	},
 	onEnd(context) {
 		if (context.keep_changes) {
+			DisplayMode.markVintageStoryAssetTransformEdited();
 			Undo.finishEdit('Edit display slot');
 		}
 	},
@@ -1178,7 +1330,7 @@ BARS.defineActions(function() {
 				_: '_',
 				info: {type: 'info', text: 'dialog.display_preset.message'},
 			};
-			VS_DISPLAY_CONTEXTS.filter(context => !context.previewOnly).forEach(context => {
+			VS_DISPLAY_CONTEXTS.filter(context => !context.previewOnly && !context.aliasOf).forEach(context => {
 				form[context.id] = {type: 'checkbox', label: context.label, value: true};
 			});
 			new Dialog({

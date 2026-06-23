@@ -1,0 +1,35 @@
+{
+  code: "attributes-transform",
+  variantgroups: [
+    { code: "color", states: ["red", "blue", "green"] },
+  ],
+  shape: { base: "item/variant/default" },
+  attributes: {
+    toolrackTransformByType: {
+      "attributes-transform-red": {
+        translation: { x: 1, y: 1, z: 1 },
+        scale: 0.75,
+      },
+      "*": {
+        translation: { x: 0, y: 0, z: 1 },
+        scale: 0.5,
+      },
+    },
+    groundStorageTransformByType: {
+      "*": {
+        translation: { x: 8, y: 1, z: 8 },
+        scale: 0.65,
+      },
+    },
+    onAntlerMountTransformByType: {
+      "attributes-transform-b*": {
+        translation: { x: 2, y: 2, z: 2 },
+        scale: 0.8,
+      },
+      "*": {
+        translation: { x: 1, y: 1, z: 1 },
+        scale: 0.4,
+      },
+    },
+  },
+}

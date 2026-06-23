@@ -1,0 +1,10 @@
+{
+  code: "simple-item",
+  shape: { base: "item/simple-item" },
+  textures: {
+    texture: { base: "item/simple-item" },
+  },
+  creativeinventory: {
+    general: ["*"],
+  },
+}
