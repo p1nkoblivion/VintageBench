@@ -8,7 +8,7 @@
 				<p class="panel_toolbar_label">{{ section.label }}</p>
 				<div class="bar tabs_small icon_bar vintage_display_contexts">
 					<template v-for="context in section.contexts">
-						<input class="hidden" type="radio" name="display" :id="'display_'+context.id" :checked="slot.slot_id === context.id" :key="'input_'+context.id" />
+						<input class="hidden" type="radio" name="display" :id="'display_'+context.id" :checked="active_context === context.id" :key="'input_'+context.id" />
 						<label class="tool" :for="'display_'+context.id" @click="loadSlot(context.id)" :key="'label_'+context.id">
 							<div class="tooltip">{{ context.label }}</div>
 							<i class="material-icons">{{ context.icon || 'tune' }}</i>
@@ -20,6 +20,23 @@
 
 		<p class="panel_toolbar_label">{{ tl('display.reference') }}</p>
 		<div id="display_ref_bar" class="bar tabs_small icon_bar"></div>
+
+		<div v-if="asset_source" class="vintage_asset_context_notice">
+			<div class="vintage_asset_context_status">
+				<label>{{ asset_source_info.label }}</label>
+				<span>{{ asset_source_info.path }}</span>
+			</div>
+			<div v-if="asset_source.inherited && asset_source.editMode !== 'shared'" class="bar vintage_asset_context_actions">
+				<div class="tool wide" @click="createAssetOverride">{{ tl('display.vintage_story_asset.create_override') }}</div>
+				<div class="tool wide" @click="editAssetSharedRule">{{ tl('display.vintage_story_asset.edit_shared') }}</div>
+			</div>
+			<div v-else-if="asset_source.isByType && !asset_source.inherited" class="bar vintage_asset_context_actions">
+				<div class="tool wide" @click="deleteAssetOverride">{{ tl('display.vintage_story_asset.delete_override') }}</div>
+			</div>
+		</div>
+		<div v-else-if="raw_shape_warning" class="vintage_asset_context_notice warning">
+			{{ tl('display.vintage_story_asset.raw_shape_warning') }}
+		</div>
 
 		<div id="display_sliders">
 			<div class="bar display_slot_section_bar">
@@ -104,6 +121,18 @@ export default {
 				this.slot.scale[1] = val;
 				this.slot.scale[2] = val;
 			}
+		},
+		asset_source() {
+			return this.slot?.vintage_story?.asset_source || null;
+		},
+		asset_source_info() {
+			return DisplayMode.describeVintageStoryAssetSource?.(this.slot.slot_id) || {label: '', path: ''};
+		},
+		raw_shape_warning() {
+			return DisplayMode.isRawVintageStoryShapeMode?.();
+		},
+		active_context() {
+			return DisplayMode.active_context || this.slot?.slot_id;
 		}
 	},
 	watch: {
@@ -144,14 +173,27 @@ export default {
 		resetChannel(channel) {
 			let v = channel === 'scale' ? 1 : 0;
 			Undo.initEdit({display_slots: [DisplayMode.display_slot]});
+			DisplayMode.ensureVintageStoryAssetTransformEditTarget();
 			DisplayMode.slot.extend({[channel]: [v, v, v]});
+			DisplayMode.markVintageStoryAssetTransformEdited();
 			Undo.finishEdit('Reset display channel');
 		},
 		start() {
 			Undo.initEdit({display_slots: [DisplayMode.display_slot]});
+			DisplayMode.ensureVintageStoryAssetTransformEditTarget();
 		},
 		save() {
+			DisplayMode.markVintageStoryAssetTransformEdited();
 			Undo.finishEdit('Change display setting');
+		},
+		createAssetOverride() {
+			DisplayMode.createVintageStoryAssetTransformOverride?.(this.slot.slot_id);
+		},
+		editAssetSharedRule() {
+			DisplayMode.editVintageStoryAssetSharedRule?.(this.slot.slot_id);
+		},
+		deleteAssetOverride() {
+			DisplayMode.deleteVintageStoryAssetTransformOverride?.(this.slot.slot_id);
 		},
 		getAxisLetter
 	},

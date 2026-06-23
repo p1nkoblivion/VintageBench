@@ -1,0 +1,131 @@
+{
+	code: "blade",
+	variantgroups: [
+		{ code: "type", states: ["falx", "blackguard", "claymore", "scrap"] },
+		{ code: "metal", states: ["scrap", "copper", "tinbronze", "iron", "admin", "ruined"] },
+	],
+	skipVariants: [
+		"blade-falx-tinbronze",
+	],
+	allowedVariants: [
+		"blade-falx-*",
+		"blade-blackguard-iron",
+		"blade-claymore-ruined",
+		"blade-scrap-scrap",
+	],
+	shapeByType: {
+		"blade-scrap-scrap": { base: "item/tool/blade/scrap" },
+		"blade-falx-admin": { base: "item/tool/blade/not-present" },
+		"blade-*-ruined": { base: "item/tool/blade/ruined/{type}" },
+		"blade-blackguard-*": { base: "item/tool/blade/blackguard" },
+		"*": { base: "item/tool/blade/{type}" },
+	},
+	textures: {
+		thongs: { base: "item/tool/blade/common/thongs" },
+		handle: { base: "item/tool/blade/common/handle" },
+	},
+	texturesByType: {
+		"blade-falx-copper": {
+			falxblade: { base: "item/tool/blade/falx-copper" },
+			handle: { base: "item/tool/blade/handle-copper" },
+		},
+		"blade-*-ruined": {
+			falxblade: { base: "item/tool/blade/ruined/{type}" },
+		},
+		"*": {
+			falxblade: { base: "item/tool/blade/generic-{metal}" },
+		},
+	},
+	guiTransformByType: {
+		"blade-claymore-ruined": {
+			translation: { x: 7, y: 8, z: 9 },
+			rotation: { x: 0, y: 45, z: 0 },
+			scale: 1.4,
+		},
+		"*": {
+			translation: { x: 1, y: 2, z: 3 },
+			rotation: { x: 10, y: 20, z: 30 },
+			scale: 0.5,
+		},
+	},
+	groundTransformByType: {
+		"blade-falx-*": {
+			translation: { x: 2, y: 0, z: 0 },
+			scale: 0.7,
+		},
+		"*": {
+			translation: { x: 0, y: 1, z: 0 },
+			scale: 0.6,
+		},
+	},
+	tpHandTransformByType: {
+		"*": {
+			translation: { x: 0, y: 3, z: 4 },
+			rotation: { x: 90, y: 0, z: 0 },
+			scale: 1,
+		},
+	},
+	attributes: {
+		toolrackTransformByType: {
+			"blade-blackguard-iron": {
+				translation: { x: 4, y: 5, z: 6 },
+				scale: 0.9,
+			},
+			"*": {
+				translation: { x: 0, y: 0, z: 1 },
+				scale: 0.5,
+			},
+		},
+		groundStorageTransformByType: {
+			"*": {
+				translation: { x: 8, y: 1, z: 8 },
+				scale: 0.65,
+			},
+		},
+		onAntlerMountTransformByType: {
+			"blade-*-ruined": {
+				translation: { x: 2, y: 2, z: 2 },
+				scale: 0.8,
+			},
+			"*": {
+				translation: { x: 1, y: 1, z: 1 },
+				scale: 0.4,
+			},
+		},
+	},
+	attributesByType: {
+		"blade-falx-*": {
+			ripHarvest: true,
+			attachableToEntity: {
+				categoryCode: "weaponfalx",
+				attachedShapeBySlotCode: {
+					"frontrightside": { base: "item/wearable/hooved/elk/weaponr-falx", keepSlotExtra: true },
+					"frontleftside": { base: "item/wearable/hooved/elk/weaponl-falx" },
+				},
+				keepAttachmentExtra: { nested: true },
+			},
+		},
+		"blade-blackguard-iron": {
+			attachableToEntity: {
+				categoryCode: "weapon1m",
+				attachedShapeBySlotCode: {
+					"frontrightside": { base: "item/wearable/hooved/elk/weaponr-blackguard" },
+					"frontleftside": { base: "item/wearable/hooved/elk/weaponl-blackguard" },
+				},
+			},
+		},
+		"*": {
+			attachableToEntity: { categoryCode: "toolholding" },
+		},
+	},
+	behaviors: [
+		{
+			name: "GroundStorable",
+			properties: {
+				layout: "WallHalves",
+				selectionBox: { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.1, z2: 1 },
+				collisionBox: { x1: 0, y1: 0, z1: 0, x2: 0, y2: 0, z2: 0 },
+			},
+		},
+	],
+}

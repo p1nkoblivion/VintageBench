@@ -1,0 +1,11 @@
+{
+  "type": "content",
+  "modid": "synthetic",
+  "name": "Synthetic Package Fixture",
+  "description": "Ready-made workspace fixture for package/export checks.",
+  "authors": ["Vintage Bench"],
+  "version": "1.0.0",
+  "dependencies": {
+    "game": ""
+  }
+}

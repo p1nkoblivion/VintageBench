@@ -1,0 +1,9 @@
+{
+  code: "missing-texture",
+  shape: { base: "block/multi-texture" },
+  textures: {
+    outside: { base: "item/not-present/missing-outside" },
+    inside: { base: "item/bytype/blue-inside" },
+    trim: { base: "item/bytype/trim" },
+  },
+}

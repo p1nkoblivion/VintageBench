@@ -1,0 +1,19 @@
+{
+	"assetType": "block",
+	"domain": "test",
+	"code": "flowerpot",
+	"variantgroups": [
+		{"code": "color", "states": ["red", "blue", "fire"]}
+	],
+	"textureMode": "by_type",
+	"texturesByTypeEntries": [
+		{"pattern": "*", "alias": "outside", "base": "block/clay/{color}clay"}
+	],
+	"maxStackSize": "64",
+	"creativeinventory": {
+		"general": ["*"]
+	},
+	"attributes": {
+		"shelvable": true
+	}
+}

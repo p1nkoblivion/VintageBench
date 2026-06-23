@@ -1,0 +1,15 @@
+{
+  code: "allowedskip",
+  variantgroups: [
+    { code: "type", states: ["alpha", "beta", "admin"] },
+    { code: "metal", states: ["copper", "iron"] },
+  ],
+  allowedVariants: [
+    "allowedskip-alpha-*",
+    "allowedskip-beta-iron",
+  ],
+  skipVariants: [
+    "allowedskip-alpha-iron",
+  ],
+  shape: { base: "item/variant/default" },
+}

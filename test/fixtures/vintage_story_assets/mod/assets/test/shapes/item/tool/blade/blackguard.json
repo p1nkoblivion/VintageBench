@@ -1,0 +1,19 @@
+{
+	"textureWidth": 32,
+	"textureHeight": 32,
+	"textures": {
+		"falxblade": "item/tool/blade/default-blackguard",
+		"handle": "item/tool/blade/common/handle"
+	},
+	"elements": [
+		{
+			"name": "blackguard",
+			"from": [0, 0, 0],
+			"to": [16, 3, 16],
+			"faces": {
+				"north": {"texture": "#falxblade", "uv": [0, 0, 16, 16]},
+				"south": {"texture": "#handle", "uv": [0, 0, 16, 16]}
+			}
+		}
+	]
+}

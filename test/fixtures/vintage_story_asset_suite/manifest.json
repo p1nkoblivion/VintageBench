@@ -1,0 +1,31 @@
+{
+  "syntheticRoot": "synthetic_mod",
+  "packageWorkspace": "package_workspace",
+  "bossFight": "../vintage_story_assets/mod/assets/test/itemtypes/tool/blade.json",
+  "fixtures": {
+    "minimalShape": ["synthetic_mod/assets/synthetic/shapes/block/minimal.json"],
+    "shapeWithCuboidChildren": ["synthetic_mod/assets/synthetic/shapes/block/children.json"],
+    "shapeWithMultipleTextureAliases": ["synthetic_mod/assets/synthetic/shapes/block/multi-texture.json"],
+    "simpleItemAsset": ["synthetic_mod/assets/synthetic/itemtypes/simple_item.json"],
+    "simpleBlockAsset": ["synthetic_mod/assets/synthetic/blocktypes/simple_block.json"],
+    "oneVariantGroupAsset": ["synthetic_mod/assets/synthetic/itemtypes/one_variant.json"],
+    "multiVariantGroupAsset": ["synthetic_mod/assets/synthetic/itemtypes/multi_variant.json"],
+    "assetWithAllowedVariants": ["synthetic_mod/assets/synthetic/itemtypes/allowed_skip.json"],
+    "assetWithSkipVariants": ["synthetic_mod/assets/synthetic/itemtypes/allowed_skip.json"],
+    "shapeByTypeExactMatch": ["synthetic_mod/assets/synthetic/itemtypes/bytype_shapes.json"],
+    "shapeByTypeWildcardMatch": ["synthetic_mod/assets/synthetic/itemtypes/bytype_shapes.json"],
+    "shapeByTypeFallback": ["synthetic_mod/assets/synthetic/itemtypes/bytype_shapes.json"],
+    "texturesByTypeExactMatch": ["synthetic_mod/assets/synthetic/itemtypes/bytype_textures.json"],
+    "texturesByTypeWildcardFallback": ["synthetic_mod/assets/synthetic/itemtypes/bytype_textures.json"],
+    "transformByTypeExactWildcardFallback": ["synthetic_mod/assets/synthetic/itemtypes/bytype_transforms.json"],
+    "attributesTransformMaps": ["synthetic_mod/assets/synthetic/itemtypes/attributes_transforms.json"],
+    "groundStorableBehaviorBoxes": ["synthetic_mod/assets/synthetic/itemtypes/groundstorable_boxes.json"],
+    "attributesByTypeAttachableToEntity": ["synthetic_mod/assets/synthetic/itemtypes/attachments.json"],
+    "creativeInventoryByType": ["synthetic_mod/assets/synthetic/itemtypes/creativeinventory_bytype.json"],
+    "unknownFieldsAtEveryLevel": ["synthetic_mod/assets/synthetic/itemtypes/unknown_fields.json", "synthetic_mod/assets/synthetic/shapes/block/unknown-fields.json"],
+    "missingShape": ["synthetic_mod/assets/synthetic/itemtypes/missing_shape.json"],
+    "missingTexture": ["synthetic_mod/assets/synthetic/itemtypes/missing_texture.json"],
+    "absolutePathRejection": ["negative/absolute_path_asset.json"],
+    "packageExportWorkspace": ["package_workspace/modinfo.json", "package_workspace/assets/synthetic/itemtypes/package_item.json"]
+  }
+}

@@ -8,6 +8,24 @@ import {
 const VS_FACE_DIRECTIONS = ['north', 'east', 'south', 'west', 'up', 'down'];
 const VS_DEFAULT_TEXTURE_CODE = 'texture';
 const VS_ROOT_FIELDS = new Set(['editor', 'textures', 'elements', 'animations', 'textureWidth', 'textureHeight', 'textureSizes', 'attributes', ...VS_DISPLAY_DIRECT_KEYS]);
+const VS_INTERACTION_BOX_SHAPE_FIELDS = [
+	'collisionbox',
+	'collisionboxes',
+	'collisionBox',
+	'collisionBoxes',
+	'collisionboxByType',
+	'collisionboxesByType',
+	'selectionbox',
+	'selectionboxes',
+	'selectionBox',
+	'selectionBoxes',
+	'selectionboxByType',
+	'selectionboxesByType',
+	'collisionSelectionBox',
+	'collisionSelectionBoxes',
+	'collisionSelectionBoxByType',
+	'collisionSelectionBoxesByType'
+];
 const VS_ELEMENT_MAPPED_FIELDS = new Set([
 	'name',
 	'from',
@@ -41,6 +59,11 @@ function copyUnknownFields(source, mapped_fields) {
 		}
 	}
 	return extra;
+}
+
+function collectPresentFields(source, mapped_fields) {
+	if (!isPlainObject(source)) return [];
+	return Object.keys(source).filter(key => mapped_fields.has(key));
 }
 
 function hasKeys(object) {
@@ -157,6 +180,11 @@ export function validateVintageStoryShape(model) {
 	if (model.textureSizes !== undefined && !isPlainObject(model.textureSizes)) {
 		warnings.push('Root "textureSizes" is not an object and will be ignored.');
 	}
+	VS_INTERACTION_BOX_SHAPE_FIELDS.forEach(field => {
+		if (Object.prototype.hasOwnProperty.call(model, field)) {
+			warnings.push(`Root "${field}" looks like an interaction box field. Vintage Story stores collision/selection boxes on item/block assets or behavior properties, not shape JSON.`);
+		}
+	});
 	if (Array.isArray(model.elements)) {
 		model.elements.forEach((element, index) => {
 			if (!isPlainObject(element)) {
@@ -197,8 +225,25 @@ function makeTextureSizeForCode(code, model) {
 	return fallback;
 }
 
-function createVintageStoryTexture(code, raw_value, size, warnings) {
-	let path = typeof raw_value === 'string' ? raw_value : '';
+function getVintageStoryTexturePathValue(raw_value) {
+	if (typeof raw_value === 'string') return raw_value;
+	if (!isPlainObject(raw_value)) return '';
+	if (typeof raw_value.base === 'string') return raw_value.base;
+	if (typeof raw_value.Base === 'string') return raw_value.Base;
+	if (isPlainObject(raw_value.Base) && typeof raw_value.Base.path === 'string') return raw_value.Base.path;
+	if (isPlainObject(raw_value.Base) && typeof raw_value.Base.Path === 'string') return raw_value.Base.Path;
+	return '';
+}
+
+function getAssetTextureSource(asset_context, raw_code, code) {
+	let aliases = asset_context?.resolved?.textures?.aliases || asset_context?.texture_sources?.aliases || {};
+	return aliases[raw_code] || aliases[code] || null;
+}
+
+function createVintageStoryTexture(code, raw_value, size, warnings, source, options = {}) {
+	let path = getVintageStoryTexturePathValue(raw_value);
+	let raw_value_has_path = typeof raw_value === 'string' || !!path;
+	let resolved_path = source?.resolvedFilePath && !source.missing ? source.resolvedFilePath : '';
 	let texture = new Texture({
 		name: code,
 		uv_width: size[0],
@@ -207,32 +252,52 @@ function createVintageStoryTexture(code, raw_value, size, warnings) {
 	texture.vintage_story = {
 		code,
 		path,
-		raw_value: typeof raw_value === 'string' ? undefined : cloneJSON(raw_value)
+		raw_value: typeof raw_value === 'string' ? undefined : cloneJSON(raw_value),
+		source: source ? cloneJSON(source) : undefined
 	};
-	if (typeof texture.loadEmpty === 'function') {
+	if (resolved_path && !options.skipTextureFiles && typeof texture.fromPath === 'function') {
+		texture.fromPath(resolved_path);
+		texture.name = code;
+		texture.vintage_story = {
+			code,
+			path,
+			raw_value: typeof raw_value === 'string' ? undefined : cloneJSON(raw_value),
+			source: source ? cloneJSON(source) : undefined
+		};
+	} else if (typeof texture.loadEmpty === 'function') {
 		texture.loadEmpty(1);
 	}
-	if (raw_value !== undefined && typeof raw_value !== 'string') {
-		addWarning(warnings, `Texture "${code}" has a non-string path value and will be preserved as raw JSON.`);
+	if (raw_value !== undefined && !raw_value_has_path) {
+		addWarning(warnings, `Texture "${code}" has no string or CompositeTexture base path and will be preserved as raw JSON.`);
 	}
 	return texture;
 }
 
-function collectTextures(model, warnings) {
+function collectTextures(model, warnings, asset_context, options = {}) {
 	let textures = isPlainObject(model.textures) ? model.textures : {[VS_DEFAULT_TEXTURE_CODE]: ''};
 	let texture_map = {};
 	for (let raw_code in textures) {
 		let code = normalizeTextureCode(raw_code);
 		let size = makeTextureSizeForCode(raw_code, model);
-		let texture = createVintageStoryTexture(code, textures[raw_code], size, warnings);
+		let source = getAssetTextureSource(asset_context, raw_code, code);
+		let texture = createVintageStoryTexture(code, textures[raw_code], size, warnings, source, options);
 		texture_map[code] = texture;
 		if (code !== raw_code) texture_map[raw_code] = texture;
 	}
 	if (!Object.keys(texture_map).length) {
-		let texture = createVintageStoryTexture(VS_DEFAULT_TEXTURE_CODE, '', [numberOrDefault(model.textureWidth, 16), numberOrDefault(model.textureHeight, 16)], warnings);
+		let texture = createVintageStoryTexture(VS_DEFAULT_TEXTURE_CODE, '', [numberOrDefault(model.textureWidth, 16), numberOrDefault(model.textureHeight, 16)], warnings, null, options);
 		texture_map[VS_DEFAULT_TEXTURE_CODE] = texture;
 	}
 	return texture_map;
+}
+
+function makeTextureImportModelForAssetContext(model, asset_context) {
+	if (asset_context?.skipTextures) return model;
+	let import_textures = asset_context?.resolved?.textures?.importTextures;
+	if (!isPlainObject(import_textures)) return model;
+	let texture_model = cloneJSON(model);
+	texture_model.textures = Object.assign({}, isPlainObject(model.textures) ? model.textures : {}, cloneJSON(import_textures));
+	return texture_model;
 }
 
 function applyFaceToCube(cube, direction, face_data, texture_map, warnings) {
@@ -240,7 +305,8 @@ function applyFaceToCube(cube, direction, face_data, texture_map, warnings) {
 	face.enabled = true;
 	face.vintage_story = {
 		extra: copyUnknownFields(face_data, VS_FACE_MAPPED_FIELDS),
-		was_present: true
+		was_present: true,
+		had_fields: collectPresentFields(face_data, VS_FACE_MAPPED_FIELDS)
 	};
 	if (face_data.enabled === false) {
 		face.enabled = false;
@@ -278,7 +344,8 @@ function createCubeFromVintageStoryElement(element, parent, texture_map, warning
 		shade: element.shade !== false,
 		vintage_story: {
 			extra: copyUnknownFields(element, VS_ELEMENT_MAPPED_FIELDS),
-			kind
+			kind,
+			had_fields: collectPresentFields(element, VS_ELEMENT_MAPPED_FIELDS)
 		}
 	}).addTo(parent || 'root').init();
 
@@ -319,7 +386,7 @@ function importVintageStoryElement(element, parent, texture_map, warnings) {
 	return node;
 }
 
-function applyVintageStoryShapeToProject(model, path, options = {}) {
+export function applyVintageStoryShapeToProject(model, path, options = {}) {
 	let warnings = options.warnings || [];
 	let validation = validateVintageStoryShape(model);
 	validation.warnings.forEach(warning => addWarning(warnings, warning));
@@ -334,6 +401,9 @@ function applyVintageStoryShapeToProject(model, path, options = {}) {
 	vs_data.editor = cloneJSON(model.editor || {allAngles: true});
 	vs_data.animations = Array.isArray(model.animations) ? cloneJSON(model.animations) : [];
 	vs_data.had_animations = Array.isArray(model.animations);
+	vs_data.shape_had_textures = isPlainObject(model.textures);
+	vs_data.shape_textures = isPlainObject(model.textures) ? cloneJSON(model.textures) : {};
+	vs_data.shape_had_texture_sizes = isPlainObject(model.textureSizes);
 	vs_data.texture_sizes = isPlainObject(model.textureSizes) ? cloneJSON(model.textureSizes) : {};
 	// Modified for Vintage Bench on 2026-06-22: preserve non-display attributes while editable display transforms use Project.display_settings.
 	vs_data.attributes = isPlainObject(model.attributes) ? copyUnknownFields(model.attributes, VS_ATTRIBUTE_TRANSFORM_FIELDS) : {};
@@ -347,7 +417,10 @@ function applyVintageStoryShapeToProject(model, path, options = {}) {
 		addWarning(warnings, 'Animations are preserved in JSON but are not editable in this pass.');
 	}
 
-	let texture_map = collectTextures(model, warnings);
+	let texture_model = makeTextureImportModelForAssetContext(model, options.asset_context);
+	let texture_map = collectTextures(texture_model, warnings, options.asset_context, {
+		skipTextureFiles: !!options.asset_context?.skipTextures
+	});
 	if (Array.isArray(model.elements)) {
 		model.elements.forEach(element => importVintageStoryElement(element, null, texture_map, warnings));
 	}
@@ -415,11 +488,12 @@ function buildTextureExportData() {
 function compileVintageStoryFace(face, direction, texture_data) {
 	if (face.enabled === false && !face.vintage_story?.was_present) return null;
 	let output = cloneJSON(face.vintage_story?.extra || {});
+	let had_fields = new Set(face.vintage_story?.had_fields || []);
 	let texture_code = texture_data.code_by_uuid[face.texture] || texture_data.default_code;
 	output.texture = `#${texture_code}`;
 	output.uv = roundedArray(face.uv, 4, 0);
-	if (face.rotation) output.rotation = roundedNumber(face.rotation);
-	if (face.enabled === false) output.enabled = false;
+	if (face.rotation || had_fields.has('rotation')) output.rotation = roundedNumber(face.rotation);
+	if (face.enabled === false || had_fields.has('enabled')) output.enabled = face.enabled !== false;
 	return output;
 }
 
@@ -446,11 +520,12 @@ function compileVintageStoryChildren(node, texture_data, warnings, skip_node) {
 }
 
 function applyRotationFields(output, rotation, vintage_data) {
+	let had_fields = new Set(vintage_data?.had_fields || []);
 	let had_rotation = vintage_data?.extra && (
 		Object.prototype.hasOwnProperty.call(vintage_data.extra, 'rotationX') ||
 		Object.prototype.hasOwnProperty.call(vintage_data.extra, 'rotationY') ||
 		Object.prototype.hasOwnProperty.call(vintage_data.extra, 'rotationZ')
-	);
+	) || had_fields.has('rotationX') || had_fields.has('rotationY') || had_fields.has('rotationZ');
 	let rx = roundedNumber(rotation?.[0] || 0);
 	let ry = roundedNumber(rotation?.[1] || 0);
 	let rz = roundedNumber(rotation?.[2] || 0);
@@ -461,10 +536,11 @@ function applyRotationFields(output, rotation, vintage_data) {
 
 function compileVintageStoryCube(cube, texture_data, warnings) {
 	let output = cloneJSON(cube.vintage_story?.extra || {});
+	let had_fields = new Set(cube.vintage_story?.had_fields || []);
 	output.name = cube.name || 'Cube';
 	output.from = roundedArray(cube.from, 3, 0);
 	output.to = roundedArray(cube.to, 3, 0);
-	output.shade = cube.shade !== false;
+	if (cube.shade !== true || had_fields.has('shade')) output.shade = cube.shade !== false;
 	output.faces = compileVintageStoryFaces(cube, texture_data);
 	output.rotationOrigin = roundedArray(cube.origin, 3, 0);
 	applyRotationFields(output, cube.rotation, cube.vintage_story);
@@ -478,6 +554,7 @@ function compileVintageStoryGroup(group, texture_data, warnings) {
 	let output = geometry_child
 		? Object.assign(cloneJSON(group.vintage_story?.extra || {}), compileVintageStoryCube(geometry_child, texture_data, warnings))
 		: cloneJSON(group.vintage_story?.extra || {});
+	let had_fields = new Set(group.vintage_story?.had_fields || []);
 	let origin = roundedArray(group.origin, 3, 0);
 	output.name = group.name || 'Group';
 	if (!geometry_child) {
@@ -485,7 +562,7 @@ function compileVintageStoryGroup(group, texture_data, warnings) {
 		output.to = origin.slice();
 		output.faces = {};
 	}
-	output.shade = group.shade !== false;
+	if (group.shade !== true || had_fields.has('shade')) output.shade = group.shade !== false;
 	output.rotationOrigin = origin;
 	applyRotationFields(output, group.rotation, group.vintage_story);
 	let children = compileVintageStoryChildren(group, texture_data, warnings, geometry_child);
@@ -509,6 +586,7 @@ export function compileVintageStoryShape(options = {}) {
 	let warnings = [];
 	let texture_data = buildTextureExportData();
 	let vs_data = Project.vintage_story_data || {};
+	let is_asset_context = !!vs_data.asset_context?.source_file_path;
 	let shape = cloneJSON(vs_data.root_extra || {});
 	shape.editor = cloneJSON(vs_data.editor || {allAngles: true});
 	if (hasKeys(vs_data.attributes)) {
@@ -516,10 +594,21 @@ export function compileVintageStoryShape(options = {}) {
 	}
 	shape.textureWidth = Project.texture_width || 16;
 	shape.textureHeight = Project.texture_height || 16;
-	if (Object.keys(texture_data.texture_sizes).length) {
+	if (is_asset_context) {
+		if (vs_data.shape_had_texture_sizes && Object.keys(vs_data.texture_sizes || {}).length) {
+			shape.textureSizes = cloneJSON(vs_data.texture_sizes);
+		}
+		if (vs_data.shape_had_textures) {
+			shape.textures = cloneJSON(vs_data.shape_textures || {});
+		}
+	} else if (vs_data.shape_had_texture_sizes) {
+		shape.textureSizes = cloneJSON(vs_data.texture_sizes || {});
+	} else if (Object.keys(texture_data.texture_sizes).length) {
 		shape.textureSizes = texture_data.texture_sizes;
 	}
-	shape.textures = texture_data.textures;
+	if (!is_asset_context) {
+		shape.textures = texture_data.textures;
+	}
 	shape.elements = [];
 
 	Outliner.root.forEach(node => {
@@ -530,7 +619,9 @@ export function compileVintageStoryShape(options = {}) {
 	if (vs_data.had_animations || (Array.isArray(vs_data.animations) && vs_data.animations.length)) {
 		shape.animations = cloneJSON(vs_data.animations || []);
 	}
-	applyVintageStoryDisplayTransformsToModel(shape, Project.display_settings);
+	if (!is_asset_context && !options.omitDisplayTransforms) {
+		applyVintageStoryDisplayTransformsToModel(shape, Project.display_settings);
+	}
 	if (warnings.length && typeof console !== 'undefined') {
 		console.warn('Vintage Story JSON export warnings:', warnings);
 	}
@@ -678,6 +769,29 @@ export function registerVintageStoryCodec() {
 			}, path => this.afterDownload(path));
 		},
 		afterSave(path) {
+			let writeTransformEdits = typeof window !== 'undefined' ? window.writeVintageStoryAssetTransformEdits : null;
+			let writeback = writeTransformEdits?.(Project.vintage_story_data?.asset_context, Project.display_settings);
+			let writeInteractionBoxEdits = typeof window !== 'undefined' ? window.writeVintageStoryAssetInteractionBoxEdits : null;
+			let box_writeback = writeInteractionBoxEdits?.(Project.vintage_story_data?.asset_context, Project.vintage_story_data?.interaction_boxes);
+			if (box_writeback?.warnings?.length) {
+				writeback = writeback || {warnings: []};
+				writeback.warnings = (writeback.warnings || []).concat(box_writeback.warnings);
+				writeback.cancelled = writeback.cancelled || box_writeback.cancelled;
+			}
+			let writeAttachmentEdits = typeof window !== 'undefined' ? window.writeVintageStoryAssetAttachmentEdits : null;
+			let attachment_writeback = writeAttachmentEdits?.(Project.vintage_story_data?.asset_context, Project.vintage_story_data?.attachments);
+			if (attachment_writeback?.warnings?.length) {
+				writeback = writeback || {warnings: []};
+				writeback.warnings = (writeback.warnings || []).concat(attachment_writeback.warnings);
+				writeback.cancelled = writeback.cancelled || attachment_writeback.cancelled;
+			}
+			if (writeback?.warnings?.length && Blockbench?.showMessageBox) {
+				Blockbench.showMessageBox({
+					title: 'Vintage Story Asset Save',
+					icon: writeback.cancelled ? 'warning' : 'info',
+					message: writeback.warnings.join('\n')
+				});
+			}
 			let name = pathToName(path, true);
 			Project.save_path = path;
 			Project.export_path = path;

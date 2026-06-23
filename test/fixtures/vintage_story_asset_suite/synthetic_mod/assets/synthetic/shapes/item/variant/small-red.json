@@ -1,0 +1,6 @@
+{
+  "textureWidth": 16,
+  "textureHeight": 16,
+  "textures": { "outside": { "base": "item/bytype/red" } },
+  "elements": [{ "name": "SmallRed", "from": [0, 0, 0], "to": [3, 3, 3], "faces": { "north": { "texture": "#outside", "uv": [0, 0, 3, 3] } } }]
+}

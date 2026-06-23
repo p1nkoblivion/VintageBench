@@ -1,0 +1,10 @@
+[
+	{
+		code: "first",
+		shape: { base: "item/tool/blade/falx" },
+	},
+	{
+		code: "second",
+		shape: { base: "item/tool/blade/blackguard" },
+	}
+]

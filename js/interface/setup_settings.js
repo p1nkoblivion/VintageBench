@@ -3,6 +3,9 @@ import { changeImageEditor } from "../desktop";
 import { app, currentwindow, dialog, fs, PathModule, SystemInfo } from "../native_apis";
 import { Setting, Settings, SettingsProfile } from "./settings";
 import { addStartScreenSection } from "./start_screen";
+import { getDefaultVintageBenchAppDataPath, getDefaultVintageBenchModExportsPath } from "../vintagestory/vs_app_data_paths";
+
+export { getDefaultVintageBenchAppDataPath, getDefaultVintageBenchModExportsPath };
 
 export function getDefaultVintageStoryAssetPath() {
 	if (!isApp) return '';
@@ -188,6 +191,27 @@ function setupSettings() {
 	new Setting('audio_scrubbing',					{category: 'preview', value: true});
 	new Setting('save_view_per_tab',				{category: 'preview', value: true});
 	new Setting('vintage_story_assets_path',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_mod_root_path',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_mod_domain',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_mod_type',			{category: 'preview', value: 'content', type: 'text', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_mod_name',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_mod_author',			{category: 'preview', value: 'P1nkOblivion', type: 'text', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_mod_version',			{category: 'preview', value: '1.0.0', type: 'text', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_mod_description',		{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_mod_dependencies',		{category: 'preview', value: 'game=', type: 'text', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_mod_website',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_mod_icon_path',		{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_data_path',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_mods_path',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_package_output_path',	{category: 'preview', value: getDefaultVintageBenchModExportsPath(), type: 'text', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_create_backups',		{category: 'preview', value: true, type: 'checkbox', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_mod_assets_path',		{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_shapes_path',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_textures_path',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_blocktypes_path',		{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_itemtypes_path',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_lang_path',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_additional_assets_paths',	{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
 
 	new Setting('viewport_rotate_speed',	{category: 'controls', value: 100, min: 10, max: 1000, type: 'number', onChange(value) {
 		Preview.all.forEach(viewport => viewport.controls.rotateSpeed = value / 100)

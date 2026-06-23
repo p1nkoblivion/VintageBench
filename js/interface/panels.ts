@@ -6,7 +6,7 @@ import {Toolbar} from './toolbars'
 import { Vue } from "../lib/libs";
 import { Blockbench } from "../api";
 
-interface PanelPositionData {
+export interface PanelPositionData {
 	slot: PanelSlot
 	float_position: [number, number]
 	float_size: [number, number]
@@ -1226,6 +1226,20 @@ try {
 		});
 	}
 } catch (err) {}
+
+export function migrateStoredPanelPosition(panel_id: string, migrate: (position: PanelPositionData, mode_id: string) => boolean | void): boolean {
+	let panel_data = StoredPanelData[panel_id];
+	if (!panel_data) return false;
+	let changed = false;
+	for (let mode_id in panel_data) {
+		let position = panel_data[mode_id];
+		if (position && migrate(position, mode_id)) changed = true;
+	}
+	if (changed) {
+		localStorage.setItem('panel_customization', JSON.stringify(StoredPanelData));
+	}
+	return changed;
+}
 
 export function setupPanels() {
 	Interface.panel_definers.forEach((definer) => {

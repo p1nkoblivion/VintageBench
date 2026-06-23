@@ -19,7 +19,95 @@ let load_project_data;
 // Modified for Vintage Bench on 2026-06-22: set the native application name for the fork.
 app.setName('Vintage Bench');
 
-(() => {
+const VINTAGE_BENCH_APPDATA_FOLDER = 'Vintagebench';
+const VINTAGE_BENCH_RUNTIME_FOLDER = 'boringstuff';
+const VINTAGE_BENCH_EXPORTS_FOLDER = 'ModExports';
+
+function ensureDirectory(directory) {
+	if (!directory) return;
+	fs.mkdirSync(directory, {recursive: true});
+}
+
+function normalizePathForCompare(value) {
+	if (!value) return '';
+	return path.resolve(value).toLowerCase();
+}
+
+function isSamePath(first, second) {
+	return normalizePathForCompare(first) === normalizePathForCompare(second);
+}
+
+function timestampSuffix() {
+	return new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
+}
+
+function uniqueDestination(target) {
+	if (!fs.existsSync(target)) return target;
+	let parsed = path.parse(target);
+	let stamp = timestampSuffix();
+	for (let index = 1; index < 1000; index++) {
+		let suffix = index === 1 ? stamp : `${stamp}-${index}`;
+		let candidate = path.join(parsed.dir, `${parsed.name}-${suffix}${parsed.ext}`);
+		if (!fs.existsSync(candidate)) return candidate;
+	}
+	return path.join(parsed.dir, `${parsed.name}-${stamp}-${process.pid}${parsed.ext}`);
+}
+
+function movePathSafely(source, target) {
+	if (!source || !target || !fs.existsSync(source) || isSamePath(source, target)) return;
+	ensureDirectory(path.dirname(target));
+	if (fs.existsSync(target)) {
+		let source_stat = fs.statSync(source);
+		let target_stat = fs.statSync(target);
+		if (source_stat.isDirectory() && target_stat.isDirectory()) {
+			for (let entry of fs.readdirSync(source)) {
+				movePathSafely(path.join(source, entry), path.join(target, entry));
+			}
+			try {
+				fs.rmdirSync(source);
+			} catch (error) {}
+			return;
+		}
+		target = uniqueDestination(target);
+	}
+	try {
+		fs.renameSync(source, target);
+	} catch (error) {
+		let stat = fs.statSync(source);
+		if (stat.isDirectory()) {
+			fs.cpSync(source, target, {recursive: true, force: false, errorOnExist: true});
+			fs.rmSync(source, {recursive: true, force: true});
+		} else {
+			fs.copyFileSync(source, target, fs.constants.COPYFILE_EXCL);
+			fs.rmSync(source, {force: true});
+		}
+	}
+}
+
+function migrateDirectoryContents(source_root, target_root, protected_paths = []) {
+	if (!source_root || !target_root || !fs.existsSync(source_root) || !fs.statSync(source_root).isDirectory()) return;
+	let protected_set = new Set(protected_paths.map(normalizePathForCompare));
+	for (let entry of fs.readdirSync(source_root)) {
+		let source_path = path.join(source_root, entry);
+		let normalized = normalizePathForCompare(source_path);
+		if (protected_set.has(normalized)) continue;
+		try {
+			movePathSafely(source_path, path.join(target_root, entry));
+		} catch (error) {
+			console.warn(`Unable to move app data entry "${source_path}" into boringstuff`, error);
+		}
+	}
+}
+
+function configureVintageBenchAppData() {
+	let app_data_root = path.join(app.getPath('appData'), VINTAGE_BENCH_APPDATA_FOLDER);
+	let runtime_root = path.join(app_data_root, VINTAGE_BENCH_RUNTIME_FOLDER);
+	let exports_root = path.join(app_data_root, VINTAGE_BENCH_EXPORTS_FOLDER);
+	let old_default_user_data = app.getPath('userData');
+	ensureDirectory(app_data_root);
+	ensureDirectory(runtime_root);
+	ensureDirectory(exports_root);
+
 	// Allow advanced users to specify a custom userData directory.
 	// Useful for portable installations, and for setting up development environments.
 	const index = process.argv.findIndex(arg => arg === '--userData');
@@ -28,9 +116,23 @@ app.setName('Vintage Bench');
 			console.error('No path specified after --userData')
 			process.exit(1)
 		}
+		ensureDirectory(process.argv[index + 1]);
 		app.setPath('userData', process.argv[index + 1]);
+		return {appDataRoot: app_data_root, runtimeRoot: runtime_root, exportsRoot: exports_root, customUserData: true};
 	}
-})()
+
+	migrateDirectoryContents(app_data_root, runtime_root, [runtime_root, exports_root]);
+	if (!isSamePath(old_default_user_data, app_data_root) && fs.existsSync(old_default_user_data)) {
+		migrateDirectoryContents(old_default_user_data, runtime_root);
+		try {
+			fs.rmdirSync(old_default_user_data);
+		} catch (error) {}
+	}
+	app.setPath('userData', runtime_root);
+	return {appDataRoot: app_data_root, runtimeRoot: runtime_root, exportsRoot: exports_root, customUserData: false};
+}
+
+configureVintageBenchAppData();
 
 const LaunchSettings = {
 	path: path.join(app.getPath('userData'), 'launch_settings.json'),

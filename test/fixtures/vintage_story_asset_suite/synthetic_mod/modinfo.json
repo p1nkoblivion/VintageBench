@@ -1,0 +1,11 @@
+{
+  "type": "content",
+  "modid": "synthetic",
+  "name": "Vintage Bench Synthetic Fixtures",
+  "description": "Commit-safe fixture mod for Vintage Bench tests.",
+  "authors": ["Vintage Bench"],
+  "version": "1.0.0",
+  "dependencies": {
+    "game": ""
+  }
+}

@@ -1,0 +1,7 @@
+{
+  code: "missing-shape",
+  shape: { base: "item/not-present/missing-shape" },
+  textures: {
+    texture: { base: "item/simple-item" },
+  },
+}

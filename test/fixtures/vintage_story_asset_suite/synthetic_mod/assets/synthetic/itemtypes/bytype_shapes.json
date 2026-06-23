@@ -1,0 +1,11 @@
+{
+  code: "bytype-shape",
+  variantgroups: [
+    { code: "color", states: ["red", "blue", "green"] },
+  ],
+  shapeByType: {
+    "bytype-shape-red": { base: "item/variant/red" },
+    "bytype-shape-b*": { base: "item/variant/blue" },
+    "*": { base: "item/variant/default" },
+  },
+}

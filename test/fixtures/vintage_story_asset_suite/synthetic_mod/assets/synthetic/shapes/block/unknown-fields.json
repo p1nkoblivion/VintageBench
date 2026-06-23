@@ -1,0 +1,23 @@
+{
+  "textureWidth": 16,
+  "textureHeight": 16,
+  "textures": {
+    "outside": { "base": "block/unknown", "keepTextureField": true }
+  },
+  "vintageBenchUnknownRootFixture": { "keep": true },
+  "elements": [
+    {
+      "name": "UnknownCarrier",
+      "from": [0, 0, 0],
+      "to": [8, 8, 8],
+      "vintageBenchUnknownElementFixture": { "keep": true },
+      "faces": {
+        "north": {
+          "texture": "#outside",
+          "uv": [0, 0, 8, 8],
+          "vintageBenchUnknownFaceFixture": { "keep": true }
+        }
+      }
+    }
+  ]
+}

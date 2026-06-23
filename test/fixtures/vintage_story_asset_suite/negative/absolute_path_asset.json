@@ -1,0 +1,7 @@
+{
+  code: "absolute-path-negative",
+  shape: { base: "item/simple-item" },
+  textures: {
+    texture: { base: "C:\\Users\\Example\\absolute-texture.png" },
+  },
+}

@@ -1,0 +1,6 @@
+{
+  "textureWidth": 16,
+  "textureHeight": 16,
+  "textures": { "texture": { "base": "item/wearable/right" } },
+  "elements": [{ "name": "RightAttachment", "from": [6, 2, 6], "to": [10, 14, 10], "faces": { "north": { "texture": "#texture", "uv": [0, 0, 4, 12] } } }]
+}

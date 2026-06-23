@@ -1,0 +1,17 @@
+{
+  "textureWidth": 16,
+  "textureHeight": 16,
+  "textures": {
+    "texture": { "base": "item/simple-item" }
+  },
+  "elements": [
+    {
+      "name": "PackageItem",
+      "from": [4, 4, 4],
+      "to": [12, 12, 12],
+      "faces": {
+        "north": { "texture": "#texture", "uv": [0, 0, 8, 8] }
+      }
+    }
+  ]
+}
