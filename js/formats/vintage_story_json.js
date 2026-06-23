@@ -769,29 +769,38 @@ export function registerVintageStoryCodec() {
 			}, path => this.afterDownload(path));
 		},
 		afterSave(path) {
-			let writeTransformEdits = typeof window !== 'undefined' ? window.writeVintageStoryAssetTransformEdits : null;
-			let writeback = writeTransformEdits?.(Project.vintage_story_data?.asset_context, Project.display_settings);
-			let writeInteractionBoxEdits = typeof window !== 'undefined' ? window.writeVintageStoryAssetInteractionBoxEdits : null;
-			let box_writeback = writeInteractionBoxEdits?.(Project.vintage_story_data?.asset_context, Project.vintage_story_data?.interaction_boxes);
-			if (box_writeback?.warnings?.length) {
-				writeback = writeback || {warnings: []};
-				writeback.warnings = (writeback.warnings || []).concat(box_writeback.warnings);
-				writeback.cancelled = writeback.cancelled || box_writeback.cancelled;
+			let writeback = {warnings: [], errors: [], backups: [], cancelled: false};
+			[
+				typeof window !== 'undefined' ? window.writeVintageStoryAssetTransformEdits : null,
+				typeof window !== 'undefined' ? window.writeVintageStoryAssetInteractionBoxEdits : null,
+				typeof window !== 'undefined' ? window.writeVintageStoryAssetAttachmentEdits : null
+			].forEach((writer, index) => {
+				if (!writer) return;
+				try {
+					let result = index === 0
+						? writer(Project.vintage_story_data?.asset_context, Project.display_settings)
+						: index === 1
+							? writer(Project.vintage_story_data?.asset_context, Project.vintage_story_data?.interaction_boxes)
+							: writer(Project.vintage_story_data?.asset_context, Project.vintage_story_data?.attachments);
+					writeback.warnings.push(...(result?.warnings || []));
+					writeback.errors.push(...(result?.errors || []));
+					writeback.backups.push(...(result?.backups || []));
+					writeback.cancelled = writeback.cancelled || !!result?.cancelled;
+				} catch (error) {
+					writeback.errors.push(error.message || String(error));
+				}
+			});
+			if (writeback.backups.length) {
+				writeback.warnings.push(`Created ${writeback.backups.length} linked asset backup${writeback.backups.length === 1 ? '' : 's'} before overwriting.`);
 			}
-			let writeAttachmentEdits = typeof window !== 'undefined' ? window.writeVintageStoryAssetAttachmentEdits : null;
-			let attachment_writeback = writeAttachmentEdits?.(Project.vintage_story_data?.asset_context, Project.vintage_story_data?.attachments);
-			if (attachment_writeback?.warnings?.length) {
-				writeback = writeback || {warnings: []};
-				writeback.warnings = (writeback.warnings || []).concat(attachment_writeback.warnings);
-				writeback.cancelled = writeback.cancelled || attachment_writeback.cancelled;
-			}
-			if (writeback?.warnings?.length && Blockbench?.showMessageBox) {
+			if ((writeback.errors.length || writeback.warnings.length) && Blockbench?.showMessageBox) {
 				Blockbench.showMessageBox({
 					title: 'Vintage Story Asset Save',
-					icon: writeback.cancelled ? 'warning' : 'info',
-					message: writeback.warnings.join('\n')
+					icon: writeback.errors.length ? 'error' : (writeback.cancelled ? 'warning' : 'info'),
+					message: writeback.errors.concat(writeback.warnings).join('\n')
 				});
 			}
+			window.VintageStoryDirtyState?.clearWrittenByReport?.(Project, {written: [path], copied: []});
 			let name = pathToName(path, true);
 			Project.save_path = path;
 			Project.export_path = path;

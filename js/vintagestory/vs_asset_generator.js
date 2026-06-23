@@ -26,8 +26,15 @@ import {
 	getVintageStoryAssetPresetTransformIds,
 	validateVintageStoryPresetAsset
 } from './vs_asset_presets.js';
+import {
+	collectUnsafeAssetJsonStrings,
+	hasPathTraversal,
+	isAbsoluteFilesystemPath,
+	validateVintageStoryAssetBasePath
+} from './vs_asset_path_safety.js';
 
 export { getSaveAsAssetPresetOptions };
+export { isAbsoluteFilesystemPath } from './vs_asset_path_safety.js';
 
 export const SAVE_AS_ASSET_TEXTURE_MODES = {
 	MODEL_DEFAULTS: 'model_defaults',
@@ -77,8 +84,6 @@ export const SAVE_AS_ASSET_BEHAVIOR_BOX_MODES = {
 export const SAVE_AS_ASSET_GROUND_STORABLE_LAYOUTS = ['', 'Quadrants', 'SingleCenter', 'Halves', 'WallHalves', 'Messy12'];
 
 const SAFE_CODE_RE = /^[a-z0-9_.:/-]+$/i;
-const ABSOLUTE_WINDOWS_PATH_RE = /^[a-zA-Z]:[\\/]/;
-const ABSOLUTE_UNIX_PATH_RE = /^\//;
 const TEXTURE_EXT_RE = /\.(png|jpe?g)$/i;
 const JSON_EXT_RE = /\.json$/i;
 const GROUND_STORABLE_BEHAVIOR_NAME = 'GroundStorable';
@@ -101,11 +106,6 @@ function isNonEmptyString(value) {
 
 export function sanitizeVintageStoryAssetCode(value) {
 	return String(value || '').trim().replace(/\s+/g, '-').replace(/[^a-zA-Z0-9_.:/-]/g, '').toLowerCase();
-}
-
-export function isAbsoluteFilesystemPath(value) {
-	let text = String(value || '').trim();
-	return ABSOLUTE_WINDOWS_PATH_RE.test(text) || ABSOLUTE_UNIX_PATH_RE.test(text) || text.includes('\\');
 }
 
 export function validateVintageStoryAssetCode(code) {
@@ -292,9 +292,11 @@ export function assetBaseFromFilePath(file_path, folder, asset_file_path = '', w
 	let normalized = slash(file_path);
 	let folder_name = String(folder || '').replace(/^\/+|\/+$/g, '');
 	let workspace_folder = workspace?.folders?.[folder_name] || workspace?.[`${folder_name}Folder`];
+	let extension_re = folder_name === 'textures' ? TEXTURE_EXT_RE : JSON_EXT_RE;
 	if (workspace_folder && isPathInside(normalized, workspace_folder)) {
 		let relative = normalized.substring(slash(workspace_folder).replace(/\/+$/, '').length + 1);
-		let base = relative.replace(folder_name === 'shapes' ? JSON_EXT_RE : TEXTURE_EXT_RE, '');
+		if (hasPathTraversal(relative)) return null;
+		let base = relative.replace(extension_re, '');
 		let domain = workspace?.domain || getVintageStoryAssetDomain(asset_file_path, 'game');
 		let asset_domain = getVintageStoryAssetDomain(asset_file_path, domain);
 		return asset_domain && domain.toLowerCase() !== asset_domain.toLowerCase()
@@ -304,7 +306,8 @@ export function assetBaseFromFilePath(file_path, folder, asset_file_path = '', w
 	let match = normalized.match(new RegExp(`(?:^|/)assets/([^/]+)/${folder_name}/(.+)$`, 'i'));
 	if (!match) return null;
 	let domain = match[1];
-	let base = match[2].replace(folder_name === 'shapes' ? JSON_EXT_RE : TEXTURE_EXT_RE, '');
+	if (hasPathTraversal(match[2])) return null;
+	let base = match[2].replace(extension_re, '');
 	let asset_domain = getVintageStoryAssetDomain(asset_file_path, domain);
 	return asset_domain && domain.toLowerCase() !== asset_domain.toLowerCase()
 		? `${domain}:${base}`
@@ -326,13 +329,13 @@ function makeCompositeTexture(base) {
 }
 
 function normalizeTextureBase(base, errors, context) {
-	let text = String(base || '').trim().replace(/\\/g, '/').replace(TEXTURE_EXT_RE, '');
-	if (!text) return '';
-	if (isAbsoluteFilesystemPath(text)) {
-		addError(errors, `${context} must be a Vintage Story asset path, not an absolute filesystem path.`);
-		return '';
-	}
-	return text;
+	let validation = validateVintageStoryAssetBasePath(base, {
+		label: context,
+		extensions: ['.png', '.jpg', '.jpeg'],
+		rejectAssetFolderPrefix: true
+	});
+	validation.errors.forEach(error => addError(errors, error));
+	return validation.ok ? validation.base : '';
 }
 
 function buildVariantPreviewObject(code, variantgroups, options = {}) {
@@ -452,12 +455,13 @@ export function parseShapeAlternatesText(text) {
 	String(text || '').split(/\r?\n/g).forEach((raw_line, index) => {
 		let line = raw_line.trim();
 		if (!line || line.startsWith('#') || line.startsWith('//')) return;
-		let base = String(line || '').trim().replace(/\\/g, '/').replace(JSON_EXT_RE, '');
-		if (isAbsoluteFilesystemPath(base)) {
-			addError(errors, `Shape alternate line ${index + 1} must be a Vintage Story asset path, not an absolute filesystem path.`);
-			return;
-		}
-		if (base) alternates.push({base});
+		let validation = validateVintageStoryAssetBasePath(line, {
+			label: `Shape alternate line ${index + 1}`,
+			extensions: ['.json'],
+			rejectAssetFolderPrefix: true
+		});
+		validation.errors.forEach(error => addError(errors, error));
+		if (validation.ok) alternates.push({base: validation.base});
 	});
 	return {alternates, errors};
 }
@@ -476,13 +480,16 @@ export function parseAttachmentSlotsText(text) {
 			return;
 		}
 		let slotCode = parts.shift().trim();
-		let base = parts.join(line.includes('|') ? '|' : '=').trim().replace(/\\/g, '/').replace(JSON_EXT_RE, '');
+		let raw_base = parts.join(line.includes('|') ? '|' : '=').trim();
+		let validation = validateVintageStoryAssetBasePath(raw_base, {
+			label: `Attachment slot "${slotCode || index + 1}"`,
+			extensions: ['.json'],
+			rejectAssetFolderPrefix: true
+		});
+		let base = validation.ok ? validation.base : '';
 		if (!slotCode) addError(errors, `Attachment slot line ${index + 1} is missing a slot code.`);
 		if (!base) addError(errors, `Attachment slot "${slotCode || index + 1}" is missing a shape base path.`);
-		if (base && isAbsoluteFilesystemPath(base)) {
-			addError(errors, `Attachment slot "${slotCode || index + 1}" must be a Vintage Story shape base path, not an absolute filesystem path.`);
-			return;
-		}
+		validation.errors.forEach(error => addError(errors, error));
 		if (slotCode && base) slots.push({slotCode, base});
 	});
 	return {slots, errors};
@@ -539,7 +546,8 @@ export function getSaveAsAssetTransformOptions() {
 			id: context.id,
 			label: context.label,
 			jsonKey: context.jsonKey,
-			location: context.location
+			location: context.location,
+			valuePath: context.valuePath ? context.valuePath.slice() : undefined
 		}));
 }
 
@@ -581,18 +589,48 @@ function applyDisplayTransforms(asset, config, variantgroups, warnings) {
 		let transform = displaySlotToVintageStoryTransform(slot);
 		if (!transform) return;
 		let container = context.location === 'attributes' ? ensureAttributes(asset) : asset;
+		let assign_transform = (target, value) => {
+			if (context.valuePath?.length) {
+				if (!isPlainObject(target[context.jsonKey])) target[context.jsonKey] = {};
+				let cursor = target[context.jsonKey];
+				for (let i = 0; i < context.valuePath.length - 1; i++) {
+					let part = context.valuePath[i];
+					let next_part = context.valuePath[i + 1];
+					if (!isPlainObject(cursor[part]) && !Array.isArray(cursor[part])) {
+						cursor[part] = typeof next_part === 'number' ? [] : {};
+					}
+					cursor = cursor[part];
+				}
+				cursor[context.valuePath[context.valuePath.length - 1]] = cloneJSON(value);
+			} else {
+				target[context.jsonKey] = cloneJSON(value);
+			}
+		};
+		let make_transform_map_entry = value => {
+			if (!context.valuePath?.length) return cloneJSON(value);
+			let entry = {};
+			let cursor = entry;
+			for (let i = 0; i < context.valuePath.length - 1; i++) {
+				let part = context.valuePath[i];
+				let next_part = context.valuePath[i + 1];
+				cursor[part] = typeof next_part === 'number' ? [] : {};
+				cursor = cursor[part];
+			}
+			cursor[context.valuePath[context.valuePath.length - 1]] = cloneJSON(value);
+			return entry;
+		};
 		if (has_variants && mode !== SAVE_AS_ASSET_TRANSFORM_MODES.GLOBAL) {
-			let map_key = `${context.jsonKey}ByType`;
+			let map_key = context.mapKey || `${context.jsonKey}ByType`;
 			if (!isPlainObject(container[map_key])) container[map_key] = {};
 			if (mode === SAVE_AS_ASSET_TRANSFORM_MODES.BY_TYPE_EXACT) {
 				exact_codes.forEach(code => {
-					container[map_key][code] = cloneJSON(transform);
+					container[map_key][code] = make_transform_map_entry(transform);
 				});
 			} else {
-				container[map_key]['*'] = cloneJSON(transform);
+				container[map_key]['*'] = make_transform_map_entry(transform);
 			}
 		} else {
-			container[context.jsonKey] = cloneJSON(transform);
+			assign_transform(container, transform);
 		}
 	});
 	if (has_variants && mode === SAVE_AS_ASSET_TRANSFORM_MODES.BY_TYPE_EXACT) {
@@ -729,13 +767,16 @@ function makeAttachableToEntity(config, errors) {
 	let slots = {};
 	(config.attachmentSlots || []).forEach(slot => {
 		let slot_code = String(slot.slotCode || '').trim();
-		let base = String(slot.base || slot.shapeBase || '').trim().replace(/\\/g, '/').replace(JSON_EXT_RE, '');
-		if (!slot_code || !base) return;
-		if (isAbsoluteFilesystemPath(base)) {
-			addError(errors, `Attachment slot "${slot_code}" must be a Vintage Story shape base path, not an absolute filesystem path.`);
+		let validation = validateVintageStoryAssetBasePath(slot.base || slot.shapeBase || '', {
+			label: `Attachment slot "${slot_code || '?'}"`,
+			extensions: ['.json'],
+			rejectAssetFolderPrefix: true
+		});
+		validation.errors.forEach(error => addError(errors, error));
+		if (!slot_code || !validation.ok) {
 			return;
 		}
-		slots[slot_code] = {base};
+		slots[slot_code] = {base: validation.base};
 	});
 	if (Object.keys(slots).length) attachment.attachedShapeBySlotCode = slots;
 	return attachment;
@@ -886,7 +927,13 @@ function validateAttachableToEntityObject(value, path, warnings) {
 			let ref = slots[slot_code];
 			let base = typeof ref === 'string' ? ref : ref?.base || ref?.Base || '';
 			if (!base) addWarning(warnings, `${path}.attachedShapeBySlotCode[${JSON.stringify(slot_code)}] has no shape base path.`);
-			if (base && isAbsoluteFilesystemPath(base)) addWarning(warnings, `${path}.attachedShapeBySlotCode[${JSON.stringify(slot_code)}] uses an absolute filesystem path.`);
+			if (base) {
+				validateVintageStoryAssetBasePath(base, {
+					label: `${path}.attachedShapeBySlotCode[${JSON.stringify(slot_code)}]`,
+					extensions: ['.json'],
+					rejectAssetFolderPrefix: true
+				}).errors.forEach(error => addWarning(warnings, error));
+			}
 		});
 	}
 }
@@ -910,6 +957,27 @@ function validateGeneratedAttachments(asset, warnings) {
 			}
 		});
 	}
+}
+
+function validateSaveTargetPaths(config, errors) {
+	if (config.shapeSavePath && !assetBaseFromFilePath(config.shapeSavePath, 'shapes', config.assetSavePath, config.workspace)) {
+		addError(errors, 'Shape Save Path must be under assets/<domain>/shapes.');
+	}
+	if (config.assetSavePath) {
+		let folder = config.assetType === 'item' ? 'itemtypes' : 'blocktypes';
+		if (!assetBaseFromFilePath(config.assetSavePath, folder, config.assetSavePath, config.workspace)) {
+			addError(errors, `${config.assetType === 'item' ? 'Item' : 'Block'} Asset Save Path must be under assets/<domain>/${folder}.`);
+		}
+	}
+	if (config.generateLang && config.langPath && !assetBaseFromFilePath(config.langPath, 'lang', config.assetSavePath, config.workspace)) {
+		addError(errors, 'Lang File must be under assets/<domain>/lang.');
+	}
+}
+
+function validateAssetJsonStringSafety(asset, errors) {
+	collectUnsafeAssetJsonStrings(asset).forEach(entry => {
+		addError(errors, `Asset JSON contains ${entry.reasons.join(' and ')} at ${entry.path}: ${entry.value}`);
+	});
 }
 
 function validateGeneratedAsset(asset, config, variants, warnings) {
@@ -974,6 +1042,7 @@ export function buildVintageStoryAssetObject(config = {}) {
 	let warnings = [];
 	let code = String(config.code || '').trim();
 	validateVintageStoryAssetCode(code).forEach(error => addError(errors, error));
+	validateSaveTargetPaths(config, errors);
 
 	let variantgroups = Array.isArray(config.variantgroups) ? cloneJSON(config.variantgroups) : [];
 	let allowed_variants = normalizeVariantPatterns(config.allowedVariants);
@@ -993,14 +1062,20 @@ export function buildVintageStoryAssetObject(config = {}) {
 	}
 	if (!shape_base) {
 		addError(errors, 'Shape base path could not be resolved.');
-	} else if (isAbsoluteFilesystemPath(shape_base)) {
-		addError(errors, 'Shape base path must be a Vintage Story asset path, not an absolute filesystem path.');
-	} else if (config.shapeMode === 'by_type') {
-		asset.shapeByType = {'*': {base: shape_base.replace(JSON_EXT_RE, '')}};
 	} else {
-		asset.shape = {base: shape_base.replace(JSON_EXT_RE, '')};
-		if (Array.isArray(config.shapeAlternates) && config.shapeAlternates.length) {
-			asset.shape.alternates = cloneJSON(config.shapeAlternates);
+		let shape_validation = validateVintageStoryAssetBasePath(shape_base, {
+			label: 'Shape base path',
+			extensions: ['.json'],
+			rejectAssetFolderPrefix: true
+		});
+		shape_validation.errors.forEach(error => addError(errors, error));
+		if (shape_validation.ok && config.shapeMode === 'by_type') {
+			asset.shapeByType = {'*': {base: shape_validation.base}};
+		} else if (shape_validation.ok) {
+			asset.shape = {base: shape_validation.base};
+			if (Array.isArray(config.shapeAlternates) && config.shapeAlternates.length) {
+				asset.shape.alternates = cloneJSON(config.shapeAlternates);
+			}
 		}
 	}
 
@@ -1036,6 +1111,7 @@ export function buildVintageStoryAssetObject(config = {}) {
 	applyEntityAttachment(asset, Object.assign({}, config, {code}), variantgroups, errors, warnings);
 
 	pruneEmptyObjects(asset);
+	validateAssetJsonStringSafety(asset, errors);
 	let variant_result = getGeneratedAssetVariants(code || 'asset', variantgroups, {
 		domain: config.domain || 'game',
 		allowedVariants: allowed_variants,

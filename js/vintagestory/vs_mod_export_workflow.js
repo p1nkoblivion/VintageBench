@@ -6,6 +6,7 @@ import {
 	defaultVintageStoryPackageName,
 	executeVintageStoryExportPlan,
 	formatVintageStoryExportReport,
+	formatVintageStoryValidationReport,
 	getVintageStoryModExportConfigFromSettings,
 	packageVintageStoryModWorkspace,
 	validateVintageStoryWorkspace
@@ -13,9 +14,16 @@ import {
 import {
 	writeVintageStoryAssetAttachmentEdits,
 	writeVintageStoryAssetInteractionBoxEdits,
+	writeVintageStoryAssetShapeAlternativeEdits,
+	writeVintageStoryAssetTextureEdits,
 	writeVintageStoryAssetTransformEdits
 } from './vs_asset_workflow.js';
 import { parseVintageStoryAssetText } from './vs_asset_document.js';
+import {
+	clearVintageStoryDirtyFilesWrittenByReport,
+	markVintageStoryExportPlanDirty
+} from './vs_dirty_state.js';
+import { rollbackVintageStoryExportReport } from './vs_backup_recovery.js';
 
 function showMessage(title, message, icon = 'info') {
 	if (Blockbench?.showMessageBox) {
@@ -45,11 +53,23 @@ function compileCurrentShapeText() {
 function runPreExportWritebacks(context, warnings) {
 	let transform_result = writeVintageStoryAssetTransformEdits(context, Project?.display_settings);
 	(transform_result?.warnings || []).forEach(warning => warnings.push(warning));
+	(transform_result?.errors || []).forEach(error => warnings.push(error));
+	let shape_alternate_result = writeVintageStoryAssetShapeAlternativeEdits(context, Project?.vintage_story_data?.shape_alternatives);
+	(shape_alternate_result?.warnings || []).forEach(warning => warnings.push(warning));
+	(shape_alternate_result?.errors || []).forEach(error => warnings.push(error));
+	let texture_result = writeVintageStoryAssetTextureEdits(context, Project?.vintage_story_data?.texture_manager_entries);
+	(texture_result?.warnings || []).forEach(warning => warnings.push(warning));
+	(texture_result?.errors || []).forEach(error => warnings.push(error));
 	let box_result = writeVintageStoryAssetInteractionBoxEdits(context, Project?.vintage_story_data?.interaction_boxes);
 	(box_result?.warnings || []).forEach(warning => warnings.push(warning));
+	(box_result?.errors || []).forEach(error => warnings.push(error));
 	let attachment_result = writeVintageStoryAssetAttachmentEdits(context, Project?.vintage_story_data?.attachments);
 	(attachment_result?.warnings || []).forEach(warning => warnings.push(warning));
-	return !!(transform_result?.cancelled || box_result?.cancelled || attachment_result?.cancelled);
+	(attachment_result?.errors || []).forEach(error => warnings.push(error));
+	return !!(
+		transform_result?.cancelled || shape_alternate_result?.cancelled || texture_result?.cancelled || box_result?.cancelled || attachment_result?.cancelled
+		|| transform_result?.errors?.length || shape_alternate_result?.errors?.length || texture_result?.errors?.length || box_result?.errors?.length || attachment_result?.errors?.length
+	);
 }
 
 function makeCurrentSessionPlan(options = {}) {
@@ -87,18 +107,69 @@ function makeCurrentSessionPlan(options = {}) {
 	return {plan, config};
 }
 
-function showReportDialog(title, text) {
+function canRollbackReport(report) {
+	return !!(report && ((report.backups || []).length || (report.created || []).length));
+}
+
+function confirmAndRollbackExport(report) {
+	let has_backups = !!report.backups?.length;
+	let has_created = !!report.created?.length;
+	let buttons = has_created && has_backups
+		? ['Restore Backups and Remove Created Files', 'Restore Backups Only', 'Cancel']
+		: (has_created ? ['Remove Created Files', 'Cancel'] : ['Restore Backups', 'Cancel']);
+	let answer = dialog.showMessageBoxSync(currentwindow, {
+		type: 'warning',
+		noLink: true,
+		title: 'Rollback Vintage Story Export?',
+		message: 'Rollback the files written by this export report?',
+		detail: [
+			has_backups ? `${report.backups.length} overwritten file backup(s) can be restored.` : '',
+			has_created ? `${report.created.length} newly created file(s) can be removed.` : ''
+		].filter(Boolean).join('\n'),
+		cancelId: buttons.length - 1,
+		defaultId: buttons.length - 1,
+		buttons
+	});
+	if (answer === buttons.length - 1) return null;
+	let removeCreated = has_created && (!has_backups || answer === 0);
+	return rollbackVintageStoryExportReport(report, {fs, PathModule}, {removeCreated});
+}
+
+function openReportBackupFolder(report) {
+	let backup = report?.backups?.[0];
+	if (backup) shell?.showItemInFolder?.(backup);
+}
+
+function showReportDialog(title, text, report = null) {
+	let buttons = [];
+	if (canRollbackReport(report)) buttons.push('Rollback Export');
+	if (report?.backups?.length) buttons.push('Open Backup Folder');
+	buttons.push('Copy Report', 'dialog.close');
+	let rollback_index = buttons.indexOf('Rollback Export');
+	let folder_index = buttons.indexOf('Open Backup Folder');
+	let copy_index = buttons.indexOf('Copy Report');
 	new Dialog({
 		id: 'vintage_story_mod_export_report',
 		title,
 		width: 820,
-		buttons: ['Copy Report', 'dialog.close'],
-		confirmIndex: 1,
+		buttons,
+		confirmIndex: buttons.length - 1,
 		form: {
 			report: {type: 'textarea', label: 'Report', value: text || '', height: 420, readonly: true, style: 'code', share_text: true}
 		},
 		onButton(index) {
-			if (index === 0) {
+			if (index === rollback_index) {
+				let rollback = confirmAndRollbackExport(report);
+				if (rollback) {
+					showReportDialog('Vintage Story Export Rollback Report', formatVintageStoryExportReport(rollback));
+				}
+				return false;
+			}
+			if (index === folder_index) {
+				openReportBackupFolder(report);
+				return false;
+			}
+			if (index === copy_index) {
 				clipboard?.writeText?.(text || '');
 				Blockbench?.showQuickMessage?.('Report copied.');
 				return false;
@@ -108,6 +179,7 @@ function showReportDialog(title, text) {
 }
 
 function confirmPlanAndExport(plan, config) {
+	markVintageStoryExportPlanDirty(Project, plan);
 	let text = formatVintageStoryExportReport(plan);
 	new Dialog({
 		id: 'vintage_story_mod_export_plan',
@@ -132,7 +204,8 @@ function confirmPlanAndExport(plan, config) {
 				return false;
 			}
 			let report = executeVintageStoryExportPlan(plan, {fs, PathModule}, {createBackups: config.createBackups !== false});
-			showReportDialog('Vintage Story Mod Export Report', formatVintageStoryExportReport(report));
+			clearVintageStoryDirtyFilesWrittenByReport(Project, report);
+			showReportDialog('Vintage Story Mod Export Report', formatVintageStoryExportReport(report), report);
 		}
 	}).show();
 }
@@ -154,14 +227,7 @@ export function validateVintageStoryModWorkspaceAction() {
 			additionalAssetRoots: config.additionalAssetRoots,
 			skipTextures: false
 		});
-		let text = [
-			'Vintage Story Mod Workspace Validation',
-			'',
-			...(result.errors || []).map(error => `Error: ${error}`),
-			...(result.warnings || []).map(warning => `Warning: ${warning}`),
-			(!result.errors?.length && !result.warnings?.length) ? 'No validation issues found.' : ''
-		].filter(line => line !== undefined).join('\n');
-		showReportDialog('Validate Vintage Story Mod Workspace', text);
+		showReportDialog('Validate Vintage Story Mod Workspace', formatVintageStoryValidationReport(result));
 	} catch (error) {
 		showMessage('Validate Vintage Story Mod Workspace', error.message || String(error), 'error');
 	}
@@ -222,7 +288,7 @@ function maybeCopyPackageToModsFolder(package_path, config, report) {
 		showMessage('Copy Package to Mods Folder', copy_report.errors.join('\n'), 'error');
 		return;
 	}
-	showReportDialog('Vintage Story Mod Package Report', `${formatVintageStoryExportReport(report)}\n\n${formatVintageStoryExportReport(copy_report)}`);
+	showReportDialog('Vintage Story Mod Package Report', `${formatVintageStoryExportReport(report)}\n\n${formatVintageStoryExportReport(copy_report)}`, copy_report);
 }
 
 export async function packageVintageStoryModAction() {
@@ -235,8 +301,10 @@ export async function packageVintageStoryModAction() {
 			additionalAssetRoots: config.additionalAssetRoots,
 			includeCode: false
 		});
-		showReportDialog('Vintage Story Mod Package Report', formatVintageStoryExportReport(report));
+		showReportDialog('Vintage Story Mod Package Report', formatVintageStoryExportReport(report), report);
 		if (!report.errors?.length) {
+			let data = Project?.vintage_story_data || (Project.vintage_story_data = {});
+			data.last_package_path = output;
 			shell?.showItemInFolder?.(output);
 			maybeCopyPackageToModsFolder(output, config, report);
 		}

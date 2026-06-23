@@ -102,7 +102,8 @@ function makeOverlayBox(box, selected) {
 	let geometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(size[0], size[1], size[2]));
 	let line = new THREE.LineSegments(geometry, materialFor(box.kind, selected));
 	line.position.set((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2);
-	if (typeof value.rotateY === 'number') line.rotation.y = Math.degToRad(value.rotateY);
+	let rotate_y = typeof value.rotateY === 'number' ? value.rotateY : box.assetRotateY?.value;
+	if (typeof rotate_y === 'number') line.rotation.y = Math.degToRad(rotate_y);
 	if (typeof value.rotateX === 'number') line.rotation.x = Math.degToRad(value.rotateX);
 	if (typeof value.rotateZ === 'number') line.rotation.z = Math.degToRad(value.rotateZ);
 	line.name = `Vintage Story ${box.label}`;
@@ -205,6 +206,8 @@ export const VintageStoryInteractionBoxes = {
 	visible: true,
 	overlayGroup: null,
 	vue: null,
+	boxUndoActive: false,
+	boxUndoOwned: false,
 
 	getBoxes() {
 		return ensureVintageData().interaction_boxes;
@@ -253,6 +256,65 @@ export const VintageStoryInteractionBoxes = {
 		}
 		if (result === 2) return false;
 		this.createOverride(box);
+		return true;
+	},
+
+	beginBoxEdit(box = this.getSelectedBox()) {
+		if (!box) return false;
+		if (!this.boxUndoActive && typeof Undo !== 'undefined' && !Undo.current_save) {
+			Undo.initEdit({vintage_story_interaction_boxes: true});
+			this.boxUndoActive = true;
+			this.boxUndoOwned = true;
+		}
+		if (!this.ensureEditTarget(box)) {
+			this.cancelBoxEdit();
+			return false;
+		}
+		if (!this.boxUndoActive) {
+			this.boxUndoActive = true;
+			this.boxUndoOwned = false;
+		}
+		return true;
+	},
+
+	finishBoxEdit(message = 'Edit interaction box') {
+		if (this.boxUndoOwned && typeof Undo !== 'undefined' && Undo.current_save) {
+			if (message) {
+				Undo.finishEdit(message);
+			} else {
+				Undo.cancelEdit(true);
+			}
+		}
+		this.boxUndoActive = false;
+		this.boxUndoOwned = false;
+		this.vue?.$forceUpdate?.();
+	},
+
+	cancelBoxEdit() {
+		if (this.boxUndoOwned && typeof Undo !== 'undefined' && Undo.current_save) {
+			Undo.cancelEdit(true);
+		}
+		this.boxUndoActive = false;
+		this.boxUndoOwned = false;
+		this.refreshOverlay();
+		this.vue?.$forceUpdate?.();
+	},
+
+	setBoxValueFromHandle(box, value) {
+		if (!box || !value) return false;
+		box.value = clone(value);
+		box.dirty = true;
+		this.refreshOverlay();
+		this.vue?.$forceUpdate?.();
+		return true;
+	},
+
+	updateBoxValueLive(box = this.getSelectedBox()) {
+		if (!box) return false;
+		if (!this.boxUndoActive && !this.beginBoxEdit(box)) return false;
+		box.dirty = true;
+		this.refreshOverlay();
+		this.vue?.$forceUpdate?.();
 		return true;
 	},
 
@@ -490,6 +552,7 @@ export const VintageStoryInteractionBoxes = {
 	},
 
 	hideOverlay() {
+		VintageStoryInteractionBoxHandles.cancelDrag();
 		if (this.overlayGroup) this.overlayGroup.visible = false;
 		VintageStoryInteractionBoxHandles.clear();
 	},
@@ -499,6 +562,26 @@ export const VintageStoryInteractionBoxes = {
 		this.refreshOverlay();
 	}
 };
+
+VintageStoryInteractionBoxHandles.setController(VintageStoryInteractionBoxes);
+
+if (typeof Blockbench !== 'undefined') {
+	Blockbench.on('create_undo_save', event => {
+		if (!event.aspects?.vintage_story_interaction_boxes) return;
+		event.save.vintage_story_interaction_boxes = cloneInteractionBoxes(Project?.vintage_story_data?.interaction_boxes || []);
+		event.save.vintage_story_interaction_box_selected = VintageStoryInteractionBoxes.selectedIndex;
+	});
+	Blockbench.on('load_undo_save', event => {
+		if (!Object.prototype.hasOwnProperty.call(event.save, 'vintage_story_interaction_boxes')) return;
+		let data = ensureVintageData();
+		data.interaction_boxes = cloneInteractionBoxes(event.save.vintage_story_interaction_boxes || []);
+		VintageStoryInteractionBoxes.selectedIndex = Math.max(0, event.save.vintage_story_interaction_box_selected || 0);
+		VintageStoryInteractionBoxes.boxUndoActive = false;
+		VintageStoryInteractionBoxes.boxUndoOwned = false;
+		VintageStoryInteractionBoxes.refreshOverlay();
+		VintageStoryInteractionBoxes.vue?.$forceUpdate?.();
+	});
+}
 
 migrateInteractionBoxesPanelToOutliner();
 

@@ -36,6 +36,12 @@ import {
 import { displaySlotHasVintageStoryTransform } from '../display_mode/vintage_story_display_transforms.js';
 import { interactionBoxFromModelBounds } from './vs_interaction_boxes.js';
 import {
+	clearVintageStoryDirtyFile,
+	setVintageStoryDirty,
+	VINTAGE_STORY_DIRTY_KINDS
+} from './vs_dirty_state.js';
+import { writeVintageStoryTextFile } from './vs_file_write_safety.js';
+import {
 	buildVintageStoryWorkspace,
 	getVintageStoryLangPath,
 	getVintageStoryWorkspaceFromSettings
@@ -69,6 +75,10 @@ function showMessage(title, message, icon = 'info') {
 	} else {
 		console.warn(title, message);
 	}
+}
+
+function shouldCreateBackups() {
+	return settings?.vintage_story_create_backups?.value !== false;
 }
 
 function currentWorkspace() {
@@ -507,9 +517,9 @@ function updateLangFile(lang_path, entries) {
 		throw new Error(`Existing lang file ${lang_path} is not a JSON object.`);
 	}
 	Object.assign(current, entries);
-	fs.mkdirSync(PathModule.dirname(lang_path), {recursive: true});
-	fs.writeFileSync(lang_path, serializeVintageStoryAssetDocument(current), 'utf8');
-	return {written: true};
+	return writeVintageStoryTextFile(lang_path, serializeVintageStoryAssetDocument(current), {fs, PathModule}, {
+		createBackups: shouldCreateBackups()
+	});
 }
 
 function getResolverOptions(asset_path) {
@@ -542,46 +552,65 @@ function attachGeneratedAssetContext(asset_path, asset_text, open_without_textur
 function saveShapeAndAsset(config, asset_text, lang_entries = {}) {
 	let shape_path = config.shapeSavePath;
 	let asset_path = config.assetSavePath;
+	let backups = [];
 	if (slash(shape_path).toLowerCase() === slash(asset_path).toLowerCase()) {
 		showMessage(SAVE_AS_NEW_ASSET_TITLE, 'Shape JSON and asset JSON cannot be saved to the same file.', 'error');
 		return false;
 	}
 	if (!confirmWritePath(shape_path, 'Shape JSON')) return false;
 	if (!confirmWritePath(asset_path, 'Asset JSON')) return false;
+	setVintageStoryDirty(Project, VINTAGE_STORY_DIRTY_KINDS.MAIN_SHAPE, true, {
+		filePath: shape_path,
+		reason: 'Pending Save as New Asset shape write'
+	});
+	setVintageStoryDirty(Project, VINTAGE_STORY_DIRTY_KINDS.ASSET, true, {
+		filePath: asset_path,
+		reason: 'Pending Save as New Asset item/block write'
+	});
+	if (config.generateLang && Object.keys(lang_entries || {}).length) {
+		setVintageStoryDirty(Project, VINTAGE_STORY_DIRTY_KINDS.LANG, true, {
+			filePath: config.langPath,
+			reason: 'Pending Save as New Asset lang write'
+		});
+	}
 	let shape_content = compileSaveAsAssetShape();
 	try {
-		fs.mkdirSync(PathModule.dirname(shape_path), {recursive: true});
-		fs.writeFileSync(shape_path, shape_content, 'utf8');
+		let shape_write = writeVintageStoryTextFile(shape_path, shape_content, {fs, PathModule}, {createBackups: shouldCreateBackups()});
+		if (shape_write.backupPath) backups.push(shape_write.backupPath);
+		clearVintageStoryDirtyFile(Project, VINTAGE_STORY_DIRTY_KINDS.MAIN_SHAPE, shape_path);
+		Project.save_path = shape_path;
+		Project.export_path = shape_path;
+		Project.export_codec = 'vintage_story_json';
+		Project.name = pathToName(shape_path, false);
+		Project.saved = true;
 	} catch (error) {
 		showMessage(SAVE_AS_NEW_ASSET_TITLE, `Shape JSON failed to save, so asset JSON was not written:\n${error.message || error}`, 'error');
 		return false;
 	}
 	try {
-		fs.mkdirSync(PathModule.dirname(asset_path), {recursive: true});
-		fs.writeFileSync(asset_path, asset_text, 'utf8');
+		let asset_write = writeVintageStoryTextFile(asset_path, asset_text, {fs, PathModule}, {createBackups: shouldCreateBackups()});
+		if (asset_write.backupPath) backups.push(asset_write.backupPath);
+		clearVintageStoryDirtyFile(Project, VINTAGE_STORY_DIRTY_KINDS.ASSET, asset_path);
 	} catch (error) {
 		showMessage(SAVE_AS_NEW_ASSET_TITLE, `Shape was saved, but asset JSON failed to save:\n${error.message || error}`, 'error');
 		return false;
 	}
 	if (config.generateLang && Object.keys(lang_entries || {}).length) {
 		try {
-			updateLangFile(config.langPath, lang_entries);
+			let lang_write = updateLangFile(config.langPath, lang_entries);
+			if (lang_write.backupPath) backups.push(lang_write.backupPath);
+			clearVintageStoryDirtyFile(Project, VINTAGE_STORY_DIRTY_KINDS.LANG, config.langPath);
 		} catch (error) {
 			showMessage(SAVE_AS_NEW_ASSET_TITLE, `Shape and asset were saved, but lang JSON failed to save:\n${error.message || error}`, 'warning');
 		}
 	}
-	Project.save_path = shape_path;
-	Project.export_path = shape_path;
-	Project.export_codec = 'vintage_story_json';
-	Project.name = pathToName(shape_path, false);
-	Project.saved = true;
 	addRecentProject({
 		name: pathToName(shape_path, true),
 		path: shape_path,
 		icon: Format.icon
 	});
 	attachGeneratedAssetContext(asset_path, asset_text);
-	Blockbench.showQuickMessage(`Saved ${pathToName(asset_path, true)} and ${pathToName(shape_path, true)}`);
+	Blockbench.showQuickMessage(`Saved ${pathToName(asset_path, true)} and ${pathToName(shape_path, true)}${backups.length ? ` with ${backups.length} backup${backups.length === 1 ? '' : 's'}` : ''}`);
 	try {
 		shell.showItemInFolder(asset_path);
 	} catch (error) {}

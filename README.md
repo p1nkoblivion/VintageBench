@@ -36,11 +36,15 @@ See [LICENSE.MD](./LICENSE.MD) for the full GPL-3.0 license text.
 
 Original Blockbench copyright notices are retained from the original project and its contributors. Vintage Bench modifications are Copyright (C) 2026 P1nkOblivion.
 
+Modified-work notice: Vintage Bench is modified from Blockbench. Vintage Bench changes began on 2026-06-22 and continue through later release commits. See [CHANGELOG.md](./CHANGELOG.md) and the Git history for dated modification details.
+
 Source code for this fork is available at:
 
 https://github.com/p1nkoblivion/VintageBench
 
 Vintage Bench is provided WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+No additional EULA or release terms may restrict GPL-3.0 redistribution, modification, or source-code access rights for Vintage Bench.
 
 See also:
 
@@ -52,6 +56,20 @@ See also:
 ## User-Created Assets
 
 Models, textures, animations, screenshots, and other assets created with Vintage Bench are owned by their creators. Using Vintage Bench does not automatically license user-created assets under GPL-3.0.
+
+## Vintage Story Assets
+
+Vintage Bench does not bundle proprietary Vintage Story game assets. Preview references are placeholders, original calibration backdrops, or loaded from a user-selected local Vintage Story installation at runtime.
+
+## Generated Declarations
+
+Generated type declarations under `types/generated/` are reproducible from the included source and scripts with:
+
+```sh
+npm run generate-types
+```
+
+They are intentionally ignored rather than treated as hand-authored release source.
 
 ## Next Major Work
 

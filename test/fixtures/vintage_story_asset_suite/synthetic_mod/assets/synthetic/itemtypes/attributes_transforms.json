@@ -31,5 +31,20 @@
         scale: 0.4,
       },
     },
+    inFirePitPropsByType: {
+      "*": {
+        burnTemperature: 650,
+        transform: {
+          translation: { x: 0, y: 0, z: 2 },
+          scale: 0.6,
+        },
+      },
+      "attributes-transform-b*": {
+        transform: {
+          translation: { x: 4, y: 4, z: 4 },
+          scale: 0.9,
+        },
+      },
+    },
   },
 }

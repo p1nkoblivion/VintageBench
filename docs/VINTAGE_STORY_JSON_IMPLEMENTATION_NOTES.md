@@ -182,6 +182,15 @@ For this pass:
 - Face unknown fields such as `glow`, `windMode`, `windData`, `reflectiveMode`, `frostable`, `autoUv`, `snapUv`, and VSMC2 editor fields such as `rotationIndex`.
 - Non-string texture values are preserved as raw JSON on the texture metadata.
 
+## Advanced asset JSON editing
+
+- `js/vintagestory/vs_advanced_json.js` provides the testable advanced-edit layer for item/block asset JSON.
+- `js/vintagestory/vs_advanced_json_workflow.js` registers desktop actions for `Advanced Asset JSON` and `Advanced modinfo.json`.
+- Existing asset sessions expose advanced sections for root asset JSON, `attributes`, `attributesByType`, `behaviors`, individual behavior `properties`, and recognized root/attributes transform ByType maps.
+- Advanced edits are applied to a cloned full asset object so unrelated fields remain preserved.
+- Applying an advanced edit first shows a readonly before/after diff; file write happens only after that confirmation.
+- Known but uncontrolled data such as combat stat maps, handbook data, custom root fields, arbitrary attributes, attributesByType entries, and behavior properties is listed as preserved in the editor.
+
 ## Unsupported or lossy in this pass
 
 - Animation editing is not implemented. Imported animation JSON is preserved and re-emitted only as raw JSON.

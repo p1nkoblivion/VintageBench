@@ -27,9 +27,24 @@ import {
 	buildVintageStoryLangEntries,
 	defaultAssetFileName,
 	defaultShapeFileName,
-	isAbsoluteFilesystemPath,
 	serializeGeneratedVintageStoryAsset
 } from './vs_asset_generator.js';
+import {
+	collectUnsafeAssetJsonStrings,
+	isAbsoluteFilesystemPath,
+	validateVintageStoryAssetBasePath
+} from './vs_asset_path_safety.js';
+import { validateBoxValue } from './vs_interaction_boxes.js';
+import {
+	addVintageStoryDiagnostic,
+	formatVintageStoryDiagnostic,
+	uniqueVintageStoryDiagnostics,
+	validationIssueText
+} from './vs_validation_diagnostics.js';
+import {
+	copyVintageStoryFile,
+	writeVintageStoryTextFile
+} from './vs_file_write_safety.js';
 
 export const VS_MODINFO_TYPES = ['content', 'code'];
 export const DEFAULT_VS_MOD_AUTHOR = 'P1nkOblivion';
@@ -39,8 +54,9 @@ const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg'];
 const JSON_EXT_RE = /\.json$/i;
 const IMAGE_EXT_RE = /\.(png|jpe?g)$/i;
 const MODID_RE = /^[a-z0-9_.-]+$/i;
-const PACKAGE_EXCLUDE_RE = /(^|\/)(\.git|node_modules|types\/generated|dist-electron|\.vscode|\.idea)(\/|$)|(^|\/)(Thumbs\.db|desktop\.ini)$/i;
-const BACKUP_EXT_RE = /\.(bak|tmp)$/i;
+const PACKAGE_EXCLUDE_RE = /(^|\/)(\.git|\.hg|\.svn|node_modules|bower_components|types\/generated|generated\/types|dist|dist-electron|build|coverage|tmp|temp|\.tmp|\.temp|\.cache|\.vscode|\.idea|\.history|\.vs|__pycache__)(\/|$)|(^|\/)(Thumbs\.db|desktop\.ini|\.DS_Store)$/i;
+const PACKAGE_EXCLUDE_EXT_RE = /\.(bak|tmp|temp|log|map|tsbuildinfo|d\.ts|d\.ts\.map|bbmodel)$/i;
+const PACKAGE_PREVIEW_ASSET_RE = /(^|\/)(\.vintagebench|vintagebench[-_]?preview|preview[-_]?assets?|preview[-_]?cache|calibration[-_]?backdrops?)(\/|$)|(^|\/)assets\/[^/]+\/(?:shapes|textures)\/vintagebench\/preview(\/|$)/i;
 
 const MODINFO_KEY_GROUPS = {
 	type: ['type', 'Type'],
@@ -104,6 +120,22 @@ function addError(plan_or_list, message, file = '') {
 	let error = file ? `${file}: ${message}` : message;
 	let list = Array.isArray(plan_or_list) ? plan_or_list : plan_or_list?.errors;
 	if (list && !list.includes(error)) list.push(error);
+}
+
+function pushDiagnostic(diagnostics, options = {}) {
+	return addVintageStoryDiagnostic(diagnostics, options);
+}
+
+function addWarningIssue(warnings, diagnostics, options = {}) {
+	let issue = pushDiagnostic(diagnostics, Object.assign({severity: 'warning'}, options));
+	addWarning(warnings, validationIssueText(issue), options.filePath || options.file || '');
+	return issue;
+}
+
+function addErrorIssue(errors, diagnostics, options = {}) {
+	let issue = pushDiagnostic(diagnostics, Object.assign({severity: 'error'}, options));
+	addError(errors, validationIssueText(issue), options.filePath || options.file || '');
+	return issue;
 }
 
 function normalizeModid(value) {
@@ -306,14 +338,21 @@ function stripDomain(base, fallback_domain = '') {
 }
 
 export function assetFilePathForBase(workspace, folder, base, extension = '.json', PathModule = null) {
-	let location = stripDomain(base, workspace?.domain || '');
+	let validation = validateVintageStoryAssetBasePath(base, {
+		label: `${folder} asset base`,
+		extensions: [extension],
+		rejectAssetFolderPrefix: true
+	});
+	if (!validation.ok) return '';
+	let location = stripDomain(validation.base, workspace?.domain || '');
 	let domain = location.domain || workspace?.domain || '';
 	let root = workspace?.modRoot && domain
 		? pathJoin(PathModule, workspace.modRoot, 'assets', domain, folder)
 		: workspace?.folders?.[folder] || '';
 	let clean_path = location.path.replace(new RegExp(`${extension.replace('.', '\\.')}$`, 'i'), '');
 	if (!root || !clean_path) return '';
-	return pathJoin(PathModule, root, ...clean_path.split('/')) + extension;
+	let target = pathJoin(PathModule, root, ...clean_path.split('/')) + extension;
+	return isPathUnderRoot(target, root) ? target : '';
 }
 
 function assetTypeFolder(type) {
@@ -326,21 +365,6 @@ export function assetFilePathForCode(workspace, type, code, PathModule = null) {
 	return workspace?.folders?.[folder]
 		? pathJoin(PathModule, workspace.folders[folder], defaultAssetFileName(base))
 		: '';
-}
-
-function collectAbsolutePaths(value, path = 'root', output = []) {
-	if (typeof value === 'string') {
-		if (isAbsoluteFilesystemPath(value)) output.push({path, value});
-		return output;
-	}
-	if (Array.isArray(value)) {
-		value.forEach((entry, index) => collectAbsolutePaths(entry, `${path}[${index}]`, output));
-		return output;
-	}
-	if (isPlainObject(value)) {
-		Object.keys(value).forEach(key => collectAbsolutePaths(value[key], `${path}.${key}`, output));
-	}
-	return output;
 }
 
 function collectObjectKeysDeep(value, key_predicate, path = 'root', output = []) {
@@ -413,6 +437,10 @@ function planTextures(plan, workspace, texture_sources, options = {}, adapters =
 	let game_root = options.gameAssetRoot || '';
 	collectTextureEntriesFromSources(texture_sources).forEach(texture => {
 		let target = textureTargetPath(workspace, texture, adapters.PathModule);
+		if (!target) {
+			addError(plan, `Texture "${texture.alias}" has an invalid texture base path: ${texture.base}`);
+			return;
+		}
 		if (texture.missing || !texture.sourcePath || (fs && !fs.existsSync(texture.sourcePath))) {
 			addWarning(plan, `Missing texture for alias "${texture.alias}": ${texture.base}`);
 			return;
@@ -435,7 +463,7 @@ function planTextures(plan, workspace, texture_sources, options = {}, adapters =
 			targetPath: target,
 			textureAlias: texture.alias,
 			textureBase: texture.base,
-			warnings: target ? [] : [`Could not map texture ${texture.base} into the workspace.`]
+			warnings: []
 		}, adapters);
 	});
 }
@@ -467,6 +495,13 @@ function addShapeEntry(plan, workspace, shape_json, shape_base, source_path, ada
 		base = source_path ? pathBasename(adapters.PathModule, source_path).replace(JSON_EXT_RE, '') : 'shape';
 		addWarning(plan, `Shape base could not be resolved; exporting as ${base}.`);
 	}
+	let validation = validateVintageStoryAssetBasePath(base, {
+		label: 'Shape base path',
+		extensions: ['.json'],
+		rejectAssetFolderPrefix: true
+	});
+	validation.errors.forEach(error => addError(plan, error));
+	if (validation.ok) base = validation.base;
 	let target = assetFilePathForBase(workspace, 'shapes', base, '.json', adapters.PathModule);
 	planEntry(plan, {
 		action: 'write',
@@ -488,7 +523,9 @@ function addAssetEntry(plan, workspace, asset_object, asset_type, source_path, a
 	let type = asset_type || getVintageStorySourceKind(source_path) || 'item';
 	let target = assetFilePathForCode(workspace, type, code, adapters.PathModule);
 	let export_asset = cloneAssetForExport(asset_object);
-	collectAbsolutePaths(export_asset).forEach(entry => addError(plan, `Asset JSON contains absolute filesystem path at ${entry.path}: ${entry.value}`));
+	collectUnsafeAssetJsonStrings(export_asset).forEach(entry => {
+		addError(plan, `Asset JSON contains ${entry.reasons.join(' and ')} at ${entry.path}: ${entry.value}`);
+	});
 	planEntry(plan, {
 		action: 'write',
 		kind: type === 'block' ? 'blocktype' : 'itemtype',
@@ -581,11 +618,29 @@ export function createVintageStoryExportPlanFromResolvedContext(options = {}, ad
 	}), adapters);
 }
 
+function expectedFolderForEntry(workspace, entry) {
+	if (!workspace?.folders) return '';
+	if (entry.kind === 'shape') return workspace.folders.shapes;
+	if (entry.kind === 'texture') return workspace.folders.textures;
+	if (entry.kind === 'itemtype') return workspace.folders.itemtypes;
+	if (entry.kind === 'blocktype') return workspace.folders.blocktypes;
+	if (entry.kind === 'lang') return workspace.folders.lang;
+	return '';
+}
+
 export function validateExportPlan(plan, adapters = {}) {
 	(plan.entries || []).forEach(entry => {
 		if (!entry.targetPath && !entry.skipped) addError(entry.errors, `${entry.kind} export target path is empty.`);
 		if (entry.targetPath && isAbsoluteFilesystemPath(entry.targetPath) && !entry.targetPath.match(/^[A-Za-z]:[\\/]/)) {
 			addError(entry.errors, `${entry.kind} target path is invalid.`);
+		}
+		let expected_folder = expectedFolderForEntry(plan.workspace, entry);
+		if (entry.targetPath && expected_folder && !isPathUnderRoot(entry.targetPath, expected_folder)) {
+			addError(entry.errors, `${entry.kind} target must be under ${expected_folder}.`);
+		}
+		let game_root = plan.options?.gameAssetRoot || '';
+		if (entry.targetPath && game_root && isPathUnderRoot(entry.targetPath, game_root) && !plan.options?.allowGameAssetWrites) {
+			addError(entry.errors, `${entry.kind} target is inside the configured Vintage Story game assets root; explicit allowGameAssetWrites is required.`);
 		}
 		if (entry.action === 'copy' && entry.sourcePath && adapters.fs && !adapters.fs.existsSync(entry.sourcePath)) {
 			addError(entry.errors, `Source file does not exist: ${entry.sourcePath}`);
@@ -596,15 +651,10 @@ export function validateExportPlan(plan, adapters = {}) {
 	return plan;
 }
 
-function makeBackupPath(target_path) {
-	let stamp = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
-	return `${target_path}.${stamp}.bak`;
-}
-
 export function executeVintageStoryExportPlan(plan, adapters = {}, options = {}) {
 	let fs = adapters.fs;
 	let PathModule = adapters.PathModule;
-	let report = {written: [], copied: [], skipped: [], overwritten: [], backups: [], warnings: [], errors: []};
+	let report = {written: [], copied: [], created: [], skipped: [], overwritten: [], backups: [], failed: [], warnings: [], errors: []};
 	if (!fs) {
 		addError(report.errors, 'No filesystem adapter was provided.');
 		return report;
@@ -620,25 +670,29 @@ export function executeVintageStoryExportPlan(plan, adapters = {}, options = {})
 		}
 		try {
 			if (!entry.targetPath) throw new Error(`${entry.kind} target path is empty.`);
-			fs.mkdirSync(pathDirname(PathModule, entry.targetPath), {recursive: true});
-			let existed = fs.existsSync(entry.targetPath);
-			if (existed && options.createBackups !== false) {
-				let backup = makeBackupPath(entry.targetPath);
-				fs.copyFileSync(entry.targetPath, backup);
-				report.backups.push(backup);
-			}
 			if (entry.action === 'copy') {
-				fs.copyFileSync(entry.sourcePath, entry.targetPath);
+				let result = copyVintageStoryFile(entry.targetPath, entry.sourcePath, {fs, PathModule}, {createBackups: options.createBackups !== false});
 				report.copied.push(entry.targetPath);
+				if (result.backupPath) report.backups.push(result.backupPath);
+				if (result.overwritten) report.overwritten.push(entry.targetPath);
+				else report.created.push(entry.targetPath);
 			} else {
-				fs.writeFileSync(entry.targetPath, entry.content || '', 'utf8');
+				let result = writeVintageStoryTextFile(entry.targetPath, entry.content || '', {fs, PathModule}, {createBackups: options.createBackups !== false});
 				report.written.push(entry.targetPath);
+				if (result.backupPath) report.backups.push(result.backupPath);
+				if (result.overwritten) report.overwritten.push(entry.targetPath);
+				else report.created.push(entry.targetPath);
 			}
-			if (existed) report.overwritten.push(entry.targetPath);
 		} catch (error) {
-			report.errors.push(`${entry.targetPath || entry.kind}: ${error.message || error}`);
+			let message = `${entry.targetPath || entry.kind}: ${error.message || error}`;
+			report.failed.push({kind: entry.kind, targetPath: entry.targetPath || '', error: error.message || String(error)});
+			report.errors.push(message);
 		}
 	});
+	let completed = report.written.length + report.copied.length;
+	if (report.errors.length && completed) {
+		addWarning(report.warnings, `Partial export completed: ${completed} file(s) were written or copied, ${report.errors.length} file(s) failed. Failed files remain dirty. Use the export report rollback action or Vintage Story Backups dialog to restore overwritten files.`);
+	}
 	return report;
 }
 
@@ -653,16 +707,451 @@ function collectByTypeMaps(object, path = 'root', output = []) {
 	return output;
 }
 
-function validateByTypeMaps(asset_object, variants, warnings) {
+function validateByTypeMaps(asset_object, variants, warnings, diagnostics = [], file_path = '') {
 	let codes = (variants?.allVariants || variants || []).map(variant => variant.variantCode || variant.codePath).filter(Boolean);
 	let skipped = (variants?.allVariants || variants || []).filter(variant => variant.skipped || variant.disallowed).map(variant => variant.variantCode || variant.codePath);
 	collectByTypeMaps(asset_object).forEach(entry => {
 		Object.keys(entry.map || {}).forEach(pattern => {
 			let matched = codes.filter(code => wildcardMatch(pattern, code));
-			if (!matched.length) addWarning(warnings, `${entry.path}[${JSON.stringify(pattern)}] matches no generated variants.`);
-			if (!pattern.includes('*') && skipped.includes(pattern)) addWarning(warnings, `${entry.path}[${JSON.stringify(pattern)}] targets a skipped or disallowed variant.`);
+			let json_path = `${entry.path}[${JSON.stringify(pattern)}]`;
+			if (!matched.length) {
+				addWarningIssue(warnings, diagnostics, {
+					code: 'bytype_no_variant_match',
+					filePath: file_path,
+					jsonPath: json_path,
+					what: `${json_path} matches no generated variants.`,
+					why: 'Vintage Story will never apply this ByType entry, so the intended variant override is dead data.',
+					suggestedFix: 'Change the ByType key to a generated variant code or wildcard pattern, or remove the unused entry.',
+					blocks: 'none'
+				});
+			}
+			if (!pattern.includes('*') && skipped.includes(pattern)) {
+				addWarningIssue(warnings, diagnostics, {
+					code: 'bytype_targets_skipped_variant',
+					filePath: file_path,
+					jsonPath: json_path,
+					variantCode: pattern,
+					what: `${json_path} targets a skipped or disallowed variant.`,
+					why: 'The exact ByType value cannot apply because that variant will not be generated for the asset.',
+					suggestedFix: 'Remove the entry, unskip or allow the variant, or move the value to a generated variant key.',
+					blocks: 'none'
+				});
+			}
+			if ((pattern === '*' || pattern.includes('*')) && matched.length > 1) {
+				addWarningIssue(warnings, diagnostics, {
+					code: 'bytype_shared_rule_multiple_variants',
+					filePath: file_path,
+					jsonPath: json_path,
+					variantCode: matched.slice(0, 6).join(', ') + (matched.length > 6 ? `, and ${matched.length - 6} more` : ''),
+					what: `${json_path} affects ${matched.length} generated variants.`,
+					why: 'Editing this fallback or wildcard entry changes multiple variants at once.',
+					suggestedFix: 'Create an exact ByType override for the selected variant before editing, unless the shared fallback change is intentional.',
+					blocks: 'none'
+				});
+			}
 		});
 	});
+}
+
+function isUnderAnyRoot(file, roots = []) {
+	return roots.some(root => root && isPathUnderRoot(file, root));
+}
+
+function looksLikeShapeJson(value) {
+	if (!isPlainObject(value) || !Array.isArray(value.elements)) return false;
+	if (typeof (value.code ?? value.Code) === 'string') return false;
+	return Object.prototype.hasOwnProperty.call(value, 'textureWidth')
+		|| Object.prototype.hasOwnProperty.call(value, 'textureHeight')
+		|| Object.prototype.hasOwnProperty.call(value, 'textures')
+		|| value.elements.length > 0;
+}
+
+function validateWorkspaceAssetPlacement(workspace, fs, errors, diagnostics = []) {
+	if (!fs || !workspace?.assetsRoot || !fs.existsSync(workspace.assetsRoot)) return;
+	let folders = workspace.folders || {};
+	let item_block_roots = [folders.itemtypes, folders.blocktypes].filter(Boolean);
+	let files = walkFiles(workspace.assetsRoot, fs);
+	files.filter(file => IMAGE_EXT_RE.test(file)).forEach(file => {
+		if (!folders.textures || !isPathUnderRoot(file, folders.textures)) {
+			addErrorIssue(errors, diagnostics, {
+				code: 'texture_file_outside_textures_folder',
+				filePath: file,
+				jsonPath: 'n/a',
+				what: 'texture file must be under assets/<domain>/textures.',
+				why: 'Vintage Story resolves texture asset bases against the domain textures folder; image files elsewhere will not resolve as textures.',
+				suggestedFix: 'Move the image into assets/<domain>/textures and update any texture base paths to match.',
+				blocks: {package: true}
+			});
+		}
+	});
+	files.filter(file => JSON_EXT_RE.test(file)).forEach(file => {
+		try {
+			let text = fs.readFileSync(file, 'utf8');
+			let document = parseVintageStoryAssetDocument(text, file);
+			if (document.assetObjects.length && !isUnderAnyRoot(file, item_block_roots)) {
+				addErrorIssue(errors, diagnostics, {
+					code: 'asset_json_outside_item_block_folder',
+					filePath: file,
+					jsonPath: 'root',
+					what: 'item/block asset JSON must be under assets/<domain>/itemtypes or assets/<domain>/blocktypes.',
+					why: 'Vintage Story only loads collectible asset JSON from the itemtypes and blocktypes folders.',
+					suggestedFix: 'Move this item or block JSON into the matching itemtypes or blocktypes folder.',
+					blocks: {package: true}
+				});
+			}
+			if (looksLikeShapeJson(document.root) && (!folders.shapes || !isPathUnderRoot(file, folders.shapes))) {
+				addErrorIssue(errors, diagnostics, {
+					code: 'shape_json_outside_shapes_folder',
+					filePath: file,
+					jsonPath: 'root',
+					what: 'shape JSON must be under assets/<domain>/shapes.',
+					why: 'Vintage Story resolves shape asset bases against the domain shapes folder; shape JSON elsewhere will not load as a shape.',
+					suggestedFix: 'Move this JSON into assets/<domain>/shapes and update shape.base references if the base path changes.',
+					blocks: {package: true}
+				});
+			}
+		} catch (error) {
+			addErrorIssue(errors, diagnostics, {
+				code: 'asset_json_parse_failed',
+				filePath: file,
+				jsonPath: 'root',
+				what: `JSON could not be parsed: ${error.message || error}`,
+				why: 'Invalid JSON prevents Vintage Story and Vintage Bench from reading the asset.',
+				suggestedFix: 'Fix the JSON syntax in this file.',
+				blocks: {save: true, export: true, package: true}
+			});
+		}
+	});
+}
+
+function validateVariantGroupsForDiagnostics(asset_object, warnings, errors, diagnostics, file_path = '') {
+	let groups = Array.isArray(asset_object?.variantgroups)
+		? asset_object.variantgroups
+		: (Array.isArray(asset_object?.VariantGroups) ? asset_object.VariantGroups : []);
+	let seen_codes = new Set();
+	groups.forEach((group, index) => {
+		let path = `root.variantgroups[${index}]`;
+		if (!isPlainObject(group)) {
+			addErrorIssue(errors, diagnostics, {
+				code: 'invalid_variantgroup',
+				filePath: file_path,
+				jsonPath: path,
+				what: 'Variant group must be an object.',
+				why: 'Vintage Story cannot generate predictable variant codes from a malformed variant group.',
+				suggestedFix: 'Replace this entry with an object containing code and states.',
+				blocks: {export: true, package: true}
+			});
+			return;
+		}
+		let code = group.code ?? group.Code;
+		let states = Array.isArray(group.states) ? group.states : (Array.isArray(group.States) ? group.States : null);
+		if (group.loadFromProperties || group.LoadFromProperties || group.loadFromPropertiesCombine || group.LoadFromPropertiesCombine) {
+			addWarningIssue(warnings, diagnostics, {
+				code: 'variantgroup_load_from_properties',
+				filePath: file_path,
+				jsonPath: path,
+				what: `Variant group "${code || 'unknown'}" uses loadFromProperties; this validator resolves explicit state lists only.`,
+				why: 'Vintage Bench cannot fully predict generated variant codes for property-loaded groups in this validation pass.',
+				suggestedFix: 'Use explicit states while editing, or confirm generated variants in Vintage Story.',
+				blocks: 'none'
+			});
+		}
+		if (!String(code || '').trim()) {
+			addErrorIssue(errors, diagnostics, {
+				code: 'invalid_variantgroup',
+				filePath: file_path,
+				jsonPath: `${path}.code`,
+				what: 'Variant group is missing a code.',
+				why: 'The group code is part of the generated variant ordering and placeholder state map.',
+				suggestedFix: 'Add a non-empty code such as "type", "material", or "size".',
+				blocks: {export: true, package: true}
+			});
+		} else {
+			let lowered = String(code).toLowerCase();
+			if (seen_codes.has(lowered)) {
+				addErrorIssue(errors, diagnostics, {
+					code: 'duplicate_variantgroup_code',
+					filePath: file_path,
+					jsonPath: `${path}.code`,
+					what: `Variant group code "${code}" is duplicated.`,
+					why: 'Duplicate group codes overwrite variant state names and make generated codes ambiguous.',
+					suggestedFix: 'Rename one of the variant groups so each group code is unique.',
+					blocks: {export: true, package: true}
+				});
+			}
+			seen_codes.add(lowered);
+		}
+		if (!Array.isArray(states)) {
+			addErrorIssue(errors, diagnostics, {
+				code: 'invalid_variantgroup',
+				filePath: file_path,
+				jsonPath: `${path}.states`,
+				what: `Variant group "${code || index + 1}" must define states as an array.`,
+				why: 'Vintage Story expands variants from the state list; without an array there is no deterministic variant set.',
+				suggestedFix: 'Set states to an array of strings, for example ["normal", "aged"].',
+				blocks: {export: true, package: true}
+			});
+			return;
+		}
+		if (!states.length) {
+			addErrorIssue(errors, diagnostics, {
+				code: 'invalid_variantgroup',
+				filePath: file_path,
+				jsonPath: `${path}.states`,
+				what: `Variant group "${code || index + 1}" has no states.`,
+				why: 'An empty state list produces no useful generated variants for this group.',
+				suggestedFix: 'Add at least one state or remove the variant group.',
+				blocks: {export: true, package: true}
+			});
+		}
+		let seen_states = new Set();
+		states.forEach((state, state_index) => {
+			let lowered = String(state || '').toLowerCase();
+			if (seen_states.has(lowered)) {
+				addWarningIssue(warnings, diagnostics, {
+					code: 'duplicate_variant_state',
+					filePath: file_path,
+					jsonPath: `${path}.states[${state_index}]`,
+					variantCode: String(state || ''),
+					what: `Variant group "${code || index + 1}" contains duplicate state "${state}".`,
+					why: 'Duplicate states generate duplicate variant codes and can hide ByType matches.',
+					suggestedFix: 'Remove the duplicate state or rename it to a unique value.',
+					blocks: 'none'
+				});
+			}
+			seen_states.add(lowered);
+		});
+	});
+}
+
+function readWorkspaceLangState(workspace, fs, PathModule, warnings, errors, diagnostics) {
+	let path = getVintageStoryLangPath(workspace, 'en', PathModule);
+	if (!path || !fs?.existsSync?.(path)) {
+		addWarningIssue(warnings, diagnostics, {
+			code: 'missing_lang_file',
+			filePath: path || pathJoin(PathModule, workspace?.assetsRoot || '', 'lang', 'en.json'),
+			jsonPath: 'root',
+			what: 'lang/en.json is missing.',
+			why: 'Without lang entries, generated items and blocks show raw translation keys in-game.',
+			suggestedFix: 'Create assets/<domain>/lang/en.json and add item- or block-prefixed names for exported assets.',
+			blocks: 'none'
+		});
+		return {path, entries: {}, exists: false};
+	}
+	try {
+		let entries = parseVintageStoryAssetText(fs.readFileSync(path, 'utf8'), path);
+		return {path, entries: isPlainObject(entries) ? entries : {}, exists: true};
+	} catch (error) {
+		addErrorIssue(errors, diagnostics, {
+			code: 'lang_parse_failed',
+			filePath: path,
+			jsonPath: 'root',
+			what: `lang/en.json could not be parsed: ${error.message || error}`,
+			why: 'Vintage Story cannot load invalid lang JSON.',
+			suggestedFix: 'Fix the JSON syntax in assets/<domain>/lang/en.json.',
+			blocks: {export: true, package: true}
+		});
+		return {path, entries: {}, exists: true, parseError: true};
+	}
+}
+
+function validateLangEntriesForVariants(lang_state, file_path, source_kind, variants, warnings, diagnostics) {
+	if (!lang_state || !lang_state.exists || lang_state.parseError) return;
+	let prefix = source_kind === 'block' ? 'block' : 'item';
+	let included = variants?.includedVariants || [];
+	included.slice(0, 40).forEach(variant => {
+		let key = `${prefix}-${variant.variantCode}`;
+		if (!Object.prototype.hasOwnProperty.call(lang_state.entries || {}, key)) {
+			addWarningIssue(warnings, diagnostics, {
+				code: 'missing_lang_entry',
+				filePath: lang_state.path || file_path,
+				jsonPath: `root[${JSON.stringify(key)}]`,
+				variantCode: variant.variantCode,
+				what: `Missing lang entry "${key}".`,
+				why: 'Vintage Story will display the raw translation key instead of a player-facing name.',
+				suggestedFix: `Add "${key}" to assets/<domain>/lang/en.json.`,
+				blocks: 'none'
+			});
+		}
+	});
+	if (included.length > 40) {
+		addWarningIssue(warnings, diagnostics, {
+			code: 'missing_lang_entry',
+			filePath: lang_state.path || file_path,
+			jsonPath: 'root',
+			what: `Lang validation checked the first 40 of ${included.length} generated variants.`,
+			why: 'Large variant sets can produce a lot of repeated missing-name warnings.',
+			suggestedFix: 'Use variant lang generation or validate the remaining entries manually.',
+			blocks: 'none'
+		});
+	}
+}
+
+function collectResolvedVariantDiagnostics(resolved, diagnostics) {
+	let file = resolved?.sourceFilePath || '';
+	let variant = resolved?.variantCode || '';
+	let shape = resolved?.shape || {};
+	if (shape.invalid) {
+		pushDiagnostic(diagnostics, {
+			code: 'shape_path_outside_shapes_folder',
+			severity: 'error',
+			filePath: file,
+			jsonPath: shape.sourcePath || shape.sourceMapPath || 'root.shape',
+			variantCode: variant,
+			what: `Shape path for ${variant} does not resolve under assets/<domain>/shapes: ${shape.resolvedBase}`,
+			why: shape.error || 'Vintage Story resolves shape asset bases against assets/<domain>/shapes and will not load paths that escape that folder.',
+			suggestedFix: 'Use a Vintage Story shape base path such as item/example or domain:item/example, without absolute paths, backslashes, or traversal.',
+			blocks: {export: true, package: true}
+		});
+	} else if (shape.missing) {
+		pushDiagnostic(diagnostics, {
+			code: shape.resolvedBase ? 'missing_shape' : 'missing_shape_entry',
+			severity: 'warning',
+			filePath: file,
+			jsonPath: shape.sourcePath || shape.sourceMapPath || 'root.shape',
+			variantCode: variant,
+			what: shape.resolvedBase
+				? `Missing shape for ${variant}: ${shape.resolvedBase}`
+				: `No shape or shapeByType entry resolved for ${variant}.`,
+			why: 'Vintage Story cannot render this variant without a resolved shape.',
+			suggestedFix: shape.resolvedBase
+				? 'Create the referenced shape under assets/<domain>/shapes or correct the shape base path.'
+				: 'Add a shape or shapeByType entry for this variant.',
+			blocks: 'none'
+		});
+	}
+	(shape.alternates || []).forEach(alternate => {
+		if (alternate.invalid) {
+			pushDiagnostic(diagnostics, {
+				code: 'shape_alternate_path_outside_shapes_folder',
+				severity: 'error',
+				filePath: file,
+				jsonPath: alternate.sourcePath || `${shape.sourcePath || 'root.shape'}.alternates[${alternate.index || 0}]`,
+				variantCode: variant,
+				what: `Alternate shape path for ${variant} does not resolve under assets/<domain>/shapes: ${alternate.resolvedBase}`,
+				why: alternate.error || 'Vintage Story resolves alternate shape bases against assets/<domain>/shapes and will not load paths that escape that folder.',
+				suggestedFix: 'Use a Vintage Story shape base path such as item/example or domain:item/example, without absolute paths, backslashes, or traversal.',
+				blocks: {export: true, package: true}
+			});
+		} else if (alternate.missing) {
+			pushDiagnostic(diagnostics, {
+				code: 'missing_shape_alternate',
+				severity: 'warning',
+				filePath: file,
+				jsonPath: alternate.sourcePath || `${shape.sourcePath || 'root.shape'}.alternates[${alternate.index || 0}]`,
+				variantCode: variant,
+				what: `Missing alternate shape for ${variant}: ${alternate.resolvedBase || '(empty)'}`,
+				why: 'Vintage Story item state visuals that select this alternate will have no shape to render.',
+				suggestedFix: 'Create the referenced alternate shape under assets/<domain>/shapes or correct the alternate base path.',
+				blocks: 'none'
+			});
+		}
+	});
+	Object.keys(resolved?.textures?.aliases || {}).forEach(alias => {
+		let entry = resolved.textures.aliases[alias] || {};
+		if (!entry.resolvedBase) {
+			pushDiagnostic(diagnostics, {
+				code: 'missing_texture_alias',
+				severity: 'warning',
+				filePath: entry.sourceMapPath === 'shape.textures' ? (shape.resolvedFilePath || file) : file,
+				jsonPath: entry.sourcePath || `root.textures.${alias}`,
+				variantCode: variant,
+				what: `Texture alias "${alias}" is used by the shape but is not defined.`,
+				why: 'Shape faces using this alias will render missing or with fallback materials.',
+				suggestedFix: `Add texture alias "${alias}" to the owning asset textures/texturesByType map or to the shape textures map.`,
+				blocks: 'none'
+			});
+		} else if (entry.invalid) {
+			pushDiagnostic(diagnostics, {
+				code: 'texture_path_outside_textures_folder',
+				severity: 'error',
+				filePath: file,
+				jsonPath: entry.sourcePath || `root.textures.${alias}`,
+				variantCode: variant,
+				what: `Texture path for ${variant} alias "${alias}" does not resolve under assets/<domain>/textures: ${entry.resolvedBase}`,
+				why: entry.error || 'Vintage Story resolves texture asset bases against assets/<domain>/textures and will not load paths that escape that folder.',
+				suggestedFix: 'Use a Vintage Story texture base path such as item/example or domain:item/example, without absolute paths, backslashes, or traversal.',
+				blocks: {export: true, package: true}
+			});
+		} else if (entry.missing) {
+			pushDiagnostic(diagnostics, {
+				code: 'missing_texture',
+				severity: 'warning',
+				filePath: file,
+				jsonPath: entry.sourcePath || `root.textures.${alias}`,
+				variantCode: variant,
+				what: `Missing texture for ${variant} alias "${alias}": ${entry.resolvedBase}`,
+				why: 'Vintage Story resolves texture bases under assets/<domain>/textures; a missing file renders as a broken texture.',
+				suggestedFix: 'Create the referenced texture under assets/<domain>/textures or correct the texture base path.',
+				blocks: 'none'
+			});
+		}
+	});
+	(resolved?.interactionBoxes || []).forEach(box => {
+		if (box.missingBehavior || box.sourcePointer?.missingBehavior) {
+			pushDiagnostic(diagnostics, {
+				code: 'behavior_box_missing_behavior',
+				severity: 'warning',
+				filePath: file,
+				jsonPath: box.sourcePath || box.sourceMapPath || 'root.behaviors',
+				variantCode: variant,
+				what: `${box.label || 'Behavior box'} targets ${box.behaviorName || 'a behavior'} that is not present in the asset.`,
+				why: 'Behavior-level boxes are ignored unless the owning behavior exists.',
+				suggestedFix: 'Add the behavior, switch the box to root-level output, or remove the behavior-level box.',
+				blocks: 'none'
+			});
+		}
+		let box_warnings = [];
+		validateBoxValue(box.value, box_warnings);
+		if (String(box.behaviorName || '').toLowerCase() === 'groundstorable' && box_warnings.length) {
+			box_warnings.forEach(warning => {
+				pushDiagnostic(diagnostics, {
+					code: 'groundstorable_box_malformed',
+					severity: 'warning',
+					filePath: file,
+					jsonPath: box.sourcePath || box.sourceMapPath || 'root.behaviors',
+					variantCode: variant,
+					what: `GroundStorable box is malformed: ${warning}`,
+					why: 'GroundStorable selection and collision boxes must be valid 0..1 block-space boxes for reliable placement.',
+					suggestedFix: 'Fix the GroundStorable box coordinates or regenerate them from the interaction box panel.',
+					blocks: 'none'
+				});
+			});
+		}
+	});
+}
+
+function validateShapeJsonOwnerFields(shape, file, warnings, diagnostics) {
+	collectObjectKeysDeep(shape, key => /^(guiTransform|groundTransform|tpHandTransform|tpOffHandTransform|.*TransformByType)$/i.test(key))
+		.forEach(entry => addWarningIssue(warnings, diagnostics, {
+			code: 'transform_in_shape_json',
+			filePath: file,
+			jsonPath: entry.path,
+			what: `Display transform field appears in shape JSON at ${entry.path}.`,
+			why: 'Vintage Story item/block display transforms belong on the owning asset JSON, not the reusable shape model.',
+			suggestedFix: 'Move this transform to the itemtype/blocktype JSON or attributes transform field, then remove it from the shape.',
+			blocks: 'none'
+		}));
+	collectObjectKeysDeep(shape, key => /^(collisionbox|collisionboxes|selectionbox|selectionboxes|collisionSelectionBoxes)$/i.test(key))
+		.forEach(entry => addWarningIssue(warnings, diagnostics, {
+			code: 'interaction_box_in_shape_json',
+			filePath: file,
+			jsonPath: entry.path,
+			what: `Interaction box field appears in shape JSON at ${entry.path}.`,
+			why: 'Vintage Story block/item selection and collision boxes belong on the owning asset or behavior, not the shape model.',
+			suggestedFix: 'Move the box to the itemtype/blocktype JSON or behavior properties, then remove it from the shape.',
+			blocks: 'none'
+		}));
+	collectObjectKeysDeep(shape, key => /^(attachableToEntity|attachableToEntityByType|attachedShapeBySlotCode)$/i.test(key))
+		.forEach(entry => addWarningIssue(warnings, diagnostics, {
+			code: 'attachment_data_in_shape_json',
+			filePath: file,
+			jsonPath: entry.path,
+			what: `Attachment asset data appears in shape JSON at ${entry.path}.`,
+			why: 'Entity attachment behavior data belongs on the item/block asset; shape JSON should only carry model attachment points.',
+			suggestedFix: 'Move attachableToEntity or attachedShapeBySlotCode data to the owning itemtype/blocktype JSON.',
+			blocks: 'none'
+		}));
 }
 
 export function validateVintageStoryWorkspace(workspace, adapters = {}, options = {}) {
@@ -670,27 +1159,98 @@ export function validateVintageStoryWorkspace(workspace, adapters = {}, options 
 	let PathModule = adapters.PathModule;
 	let warnings = [];
 	let errors = [];
-	if (!workspace?.modRoot) addError(errors, 'Mod workspace root is not configured.');
-	if (!workspace?.domain) addError(errors, 'Workspace domain / modid is not configured.');
+	let diagnostics = [];
+	if (!workspace?.modRoot) {
+		addErrorIssue(errors, diagnostics, {
+			code: 'missing_workspace_root',
+			filePath: 'settings',
+			jsonPath: 'workspace.modRoot',
+			what: 'Mod workspace root is not configured.',
+			why: 'Vintage Bench needs a mod root to find modinfo.json and assets/<domain>.',
+			suggestedFix: 'Set the Vintage Story mod workspace root in settings.',
+			blocks: {export: true, package: true}
+		});
+	}
+	if (!workspace?.domain) {
+		addErrorIssue(errors, diagnostics, {
+			code: 'missing_workspace_domain',
+			filePath: 'settings',
+			jsonPath: 'workspace.domain',
+			what: 'Workspace domain / modid is not configured.',
+			why: 'Vintage Story asset paths are resolved under assets/<domain>.',
+			suggestedFix: 'Set the Vintage Story mod domain/modid in settings.',
+			blocks: {export: true, package: true}
+		});
+	}
 	let info_path = modInfoPath(workspace, PathModule);
 	if (!info_path || !fs?.existsSync?.(info_path)) {
-		addError(errors, 'modinfo.json is missing.');
+		addErrorIssue(errors, diagnostics, {
+			code: 'missing_modinfo',
+			filePath: info_path || 'modinfo.json',
+			jsonPath: 'root',
+			what: 'modinfo.json is missing.',
+			why: 'Vintage Story ignores a mod package when modinfo.json is not present at the mod root or zip root.',
+			suggestedFix: 'Create modinfo.json at the workspace root or export once with modinfo generation enabled.',
+			blocks: {package: true}
+		});
 	} else {
 		try {
 			let modinfo = parseVintageStoryAssetText(fs.readFileSync(info_path, 'utf8'), info_path);
 			let result = validateVintageStoryModInfo(modinfo, workspace);
 			warnings.push(...result.warnings);
 			errors.push(...result.errors);
+			let modid = modinfo.modid || modinfo.modID || modinfo.Modid || modinfo.ModID;
+			if (workspace.domain && modid && String(workspace.domain).toLowerCase() !== String(modid).toLowerCase()) {
+				pushDiagnostic(diagnostics, {
+					code: 'modid_domain_mismatch',
+					severity: 'warning',
+					filePath: info_path,
+					jsonPath: 'root.modid',
+					what: `modinfo modid "${modid}" does not match workspace domain "${workspace.domain}".`,
+					why: 'The package domain controls assets/<domain>, while modinfo controls the mod id; a mismatch makes references and distribution confusing.',
+					suggestedFix: 'Make modinfo.modid and the workspace domain the same value, or intentionally move assets to the matching domain.',
+					blocks: 'none'
+				});
+			}
 		} catch (error) {
-			addError(errors, `modinfo.json could not be parsed: ${error.message || error}`);
+			addErrorIssue(errors, diagnostics, {
+				code: 'modinfo_parse_failed',
+				filePath: info_path,
+				jsonPath: 'root',
+				what: `modinfo.json could not be parsed: ${error.message || error}`,
+				why: 'Vintage Story cannot load invalid mod metadata.',
+				suggestedFix: 'Fix the JSON syntax in modinfo.json.',
+				blocks: {package: true}
+			});
 		}
 	}
-	if (workspace?.assetsRoot && fs && !fs.existsSync(workspace.assetsRoot)) addError(errors, `assets/<domain> folder is missing: ${workspace.assetsRoot}`);
-	['itemtypes', 'blocktypes', 'shapes', 'textures'].forEach(folder => {
+	if (workspace?.assetsRoot && fs && !fs.existsSync(workspace.assetsRoot)) {
+		addErrorIssue(errors, diagnostics, {
+			code: 'missing_assets_domain_folder',
+			filePath: workspace.assetsRoot,
+			jsonPath: 'n/a',
+			what: `assets/<domain> folder is missing: ${workspace.assetsRoot}`,
+			why: 'Vintage Story expects all mod assets under assets/<domain> at the mod root.',
+			suggestedFix: 'Create assets/<domain>/ and put itemtypes, blocktypes, shapes, textures, and lang under it.',
+			blocks: {export: true, package: true}
+		});
+	}
+	['itemtypes', 'blocktypes', 'shapes', 'textures', 'lang'].forEach(folder => {
 		let path = workspace?.folders?.[folder];
-		if (path && fs && !fs.existsSync(path)) addWarning(warnings, `${folder} folder does not exist yet: ${path}`);
+		if (path && fs && !fs.existsSync(path)) {
+			addWarningIssue(warnings, diagnostics, {
+				code: 'missing_asset_subfolder',
+				filePath: path,
+				jsonPath: 'n/a',
+				what: `${folder} folder does not exist yet: ${path}`,
+				why: `Vintage Story expects ${folder} content in the standard assets/<domain>/${folder} folder when those files exist.`,
+				suggestedFix: `Create assets/<domain>/${folder} before exporting ${folder} content.`,
+				blocks: 'none'
+			});
+		}
 	});
 	if (fs && workspace?.assetsRoot && fs.existsSync(workspace.assetsRoot)) {
+		validateWorkspaceAssetPlacement(workspace, fs, errors, diagnostics);
 		let roots = buildVintageStoryAssetRoots(info_path, {
 			modAssetRoot: workspace.modRoot,
 			gameAssetRoot: options.gameAssetRoot,
@@ -702,13 +1262,28 @@ export function validateVintageStoryWorkspace(workspace, adapters = {}, options 
 			if (!root || !fs.existsSync(root)) return;
 			walkFiles(root, fs).filter(path => path.toLowerCase().endsWith('.json')).forEach(path => asset_files.push(path));
 		});
+		let lang_state = (!options.skipLang && asset_files.length)
+			? readWorkspaceLangState(workspace, fs, PathModule, warnings, errors, diagnostics)
+			: null;
 		asset_files.forEach(file => {
 			try {
 				let document = parseVintageStoryAssetDocument(fs.readFileSync(file, 'utf8'), file);
 				document.assetObjects.forEach((entry, index) => {
 					let variants = listVintageStoryAssetVariants(document, index);
-					validateByTypeMaps(entry.object, variants, warnings);
-					collectAbsolutePaths(entry.object).forEach(absolute => addError(errors, `${file}: absolute filesystem path at ${absolute.path}`));
+					validateVariantGroupsForDiagnostics(entry.object, warnings, errors, diagnostics, file);
+					validateByTypeMaps(entry.object, variants, warnings, diagnostics, file);
+					validateLangEntriesForVariants(lang_state, file, getVintageStorySourceKind(file), variants, warnings, diagnostics);
+					collectUnsafeAssetJsonStrings(entry.object).forEach(unsafe => {
+						addErrorIssue(errors, diagnostics, {
+							code: 'unsafe_asset_json_path',
+							filePath: file,
+							jsonPath: unsafe.path,
+							what: `Asset JSON contains ${unsafe.reasons.join(' and ')} at ${unsafe.path}.`,
+							why: 'Runtime asset JSON must contain Vintage Story asset base paths, not local filesystem paths or traversal.',
+							suggestedFix: 'Replace the value with a domain asset base path such as item/example or block/example.',
+							blocks: {export: true, package: true}
+						});
+					});
 					variants.includedVariants.slice(0, options.maxValidatedVariants || 60).forEach(variant => {
 						let resolved = resolveVintageStoryAssetVariant(document, index, variant, {
 							sourceFilePath: file,
@@ -719,27 +1294,45 @@ export function validateVintageStoryWorkspace(workspace, adapters = {}, options 
 							additionalAssetRoots: options.additionalAssetRoots,
 							skipTextures: !!options.skipTextures
 						});
+						collectResolvedVariantDiagnostics(resolved, diagnostics);
 						(resolved.warnings || []).forEach(warning => addWarning(warnings, `${file}: ${warning}`));
 					});
 				});
 			} catch (error) {
-				addError(errors, `${file}: ${error.message || error}`);
+				addErrorIssue(errors, diagnostics, {
+					code: 'asset_parse_failed',
+					filePath: file,
+					jsonPath: 'root',
+					what: `Asset JSON could not be parsed: ${error.message || error}`,
+					why: 'Vintage Story cannot load invalid itemtype or blocktype JSON.',
+					suggestedFix: 'Fix the JSON syntax in this asset file.',
+					blocks: {export: true, package: true}
+				});
 			}
 		});
 		let shape_files = walkFiles(workspace.folders.shapes || '', fs).filter(path => path.toLowerCase().endsWith('.json'));
 		shape_files.forEach(file => {
 			try {
 				let shape = parseVintageStoryAssetText(fs.readFileSync(file, 'utf8'), file);
-				collectObjectKeysDeep(shape, key => /^(guiTransform|groundTransform|tpHandTransform|tpOffHandTransform|.*TransformByType)$/i.test(key))
-					.forEach(entry => addWarning(warnings, `${file}: display transform field appears in shape JSON at ${entry.path}.`));
-				collectObjectKeysDeep(shape, key => /^(collisionbox|collisionboxes|selectionbox|selectionboxes|collisionSelectionBoxes)$/i.test(key))
-					.forEach(entry => addWarning(warnings, `${file}: interaction box field appears in shape JSON at ${entry.path}.`));
+				validateShapeJsonOwnerFields(shape, file, warnings, diagnostics);
 			} catch (error) {
-				addError(errors, `${file}: ${error.message || error}`);
+				addErrorIssue(errors, diagnostics, {
+					code: 'shape_parse_failed',
+					filePath: file,
+					jsonPath: 'root',
+					what: `Shape JSON could not be parsed: ${error.message || error}`,
+					why: 'Vintage Story cannot load invalid shape JSON.',
+					suggestedFix: 'Fix the JSON syntax in this shape file.',
+					blocks: {export: true, package: true}
+				});
 			}
 		});
 	}
-	return {warnings: Array.from(new Set(warnings)), errors: Array.from(new Set(errors))};
+	return {
+		warnings: Array.from(new Set(warnings)),
+		errors: Array.from(new Set(errors)),
+		diagnostics: uniqueVintageStoryDiagnostics(diagnostics)
+	};
 }
 
 function walkFiles(root, fs) {
@@ -756,11 +1349,21 @@ function walkFiles(root, fs) {
 function shouldPackageFile(relative_path, options = {}) {
 	let rel = slash(relative_path).replace(/^\/+/, '');
 	if (!rel) return false;
-	if (PACKAGE_EXCLUDE_RE.test(rel) || BACKUP_EXT_RE.test(rel)) return false;
+	if (PACKAGE_EXCLUDE_RE.test(rel) || PACKAGE_EXCLUDE_EXT_RE.test(rel) || PACKAGE_PREVIEW_ASSET_RE.test(rel)) return false;
 	if (rel === 'modinfo.json' || rel === 'modicon.png') return true;
-	if (rel.startsWith('assets/')) return true;
+	if (rel.startsWith('assets/')) {
+		let domain = String(options.domain || '').trim().toLowerCase();
+		return !domain || rel.toLowerCase().startsWith(`assets/${domain}/`);
+	}
 	if (options.includeCode && (/^src\//i.test(rel) || /\.(dll|pdb)$/i.test(rel))) return true;
 	return false;
+}
+
+function packageExcludeReason(relative_path) {
+	let rel = slash(relative_path).replace(/^\/+/, '');
+	if (PACKAGE_PREVIEW_ASSET_RE.test(rel)) return 'non-redistributable preview asset';
+	if (PACKAGE_EXCLUDE_RE.test(rel) || PACKAGE_EXCLUDE_EXT_RE.test(rel)) return 'internal/generated/local file';
+	return '';
 }
 
 export function defaultVintageStoryPackageName(modinfo = {}) {
@@ -772,29 +1375,90 @@ export function defaultVintageStoryPackageName(modinfo = {}) {
 export async function packageVintageStoryModWorkspace(workspace, output_path, adapters = {}, options = {}) {
 	let fs = adapters.fs;
 	let PathModule = adapters.PathModule;
-	let report = {outputPath: output_path || '', included: [], excluded: [], warnings: [], errors: []};
+	let report = {outputPath: output_path || '', included: [], excluded: [], warnings: [], errors: [], diagnostics: []};
 	if (!fs) {
-		addError(report.errors, 'No filesystem adapter was provided.');
+		addErrorIssue(report.errors, report.diagnostics, {
+			code: 'missing_filesystem_adapter',
+			filePath: 'n/a',
+			jsonPath: 'n/a',
+			what: 'No filesystem adapter was provided.',
+			why: 'Packaging needs filesystem access to read mod files and write the zip.',
+			suggestedFix: 'Run packaging from the desktop environment with filesystem access.',
+			blocks: {package: true}
+		});
 		return report;
 	}
 	let validation = validateVintageStoryWorkspace(workspace, adapters, options);
 	report.warnings.push(...validation.warnings);
 	report.errors.push(...validation.errors);
+	report.diagnostics.push(...(validation.diagnostics || []));
 	if (report.errors.length && !options.allowValidationErrors) return report;
 	let zip = new JSZip();
 	let root = workspace.modRoot;
+	let package_options = Object.assign({}, options, {domain: workspace.domain || options.domain || ''});
 	let files = walkFiles(root, fs);
 	files.forEach(file => {
 		let rel = pathRelative(PathModule, root, file);
-		if (!shouldPackageFile(rel, options)) {
+		let exclude_reason = packageExcludeReason(rel);
+		if (!shouldPackageFile(rel, package_options)) {
 			report.excluded.push(rel);
+			if (exclude_reason) {
+				pushDiagnostic(report.diagnostics, {
+					code: 'package_excluded_internal_file',
+					severity: 'info',
+					filePath: rel,
+					jsonPath: 'n/a',
+					what: `Package excluded ${rel} (${exclude_reason}).`,
+					why: 'Vintage Story mod zips should only contain distributable mod files, not editor state, generated declarations, caches, or preview-only assets.',
+					suggestedFix: 'No action is needed unless this file should be redistributed; if so, move it into the correct assets/<domain> folder and remove preview/internal naming.',
+					blocks: 'none'
+				});
+			}
+			return;
+		}
+		if (exclude_reason) {
+			addErrorIssue(report.errors, report.diagnostics, {
+				code: 'package_includes_internal_file',
+				filePath: rel,
+				jsonPath: 'n/a',
+				what: `Package would include ${rel} (${exclude_reason}).`,
+				why: 'Internal/generated/local files should not ship in a Vintage Story mod package.',
+				suggestedFix: 'Remove this file from the package input or add it to the package exclusion rules.',
+				blocks: {package: true}
+			});
 			return;
 		}
 		zip.file(rel, fs.readFileSync(file));
 		report.included.push(rel);
 	});
-	if (!report.included.includes('modinfo.json')) addError(report.errors, 'Package would not contain modinfo.json at zip root.');
-	if (!report.included.some(file => file === 'assets' || file.startsWith('assets/'))) addError(report.errors, 'Package would not contain assets/ at zip root.');
+	if (!report.included.includes('modinfo.json')) {
+		addErrorIssue(report.errors, report.diagnostics, {
+			code: 'package_missing_root_modinfo',
+			filePath: 'modinfo.json',
+			jsonPath: 'root',
+			what: 'Package would not contain modinfo.json at zip root.',
+			why: 'Vintage Story ignores a mod zip when modinfo.json is missing from the zip root.',
+			suggestedFix: 'Generate or place modinfo.json at the mod workspace root before packaging.',
+			blocks: {package: true}
+		});
+	}
+	let domain = String(workspace.domain || '').trim().toLowerCase();
+	let has_domain_assets = report.included.some(file => {
+		let rel = file.toLowerCase();
+		return domain ? rel.startsWith(`assets/${domain}/`) : rel.startsWith('assets/');
+	});
+	if (!has_domain_assets) {
+		addErrorIssue(report.errors, report.diagnostics, {
+			code: 'package_missing_assets_domain',
+			filePath: 'assets',
+			jsonPath: 'n/a',
+			what: 'Package would not contain assets/<domain>/ at zip root.',
+			why: 'Vintage Story expects mod assets under assets/<domain> inside the package.',
+			suggestedFix: 'Create assets/<domain>/ with itemtypes, blocktypes, shapes, textures, or lang files before packaging.',
+			blocks: {package: true}
+		});
+	}
+	report.diagnostics = uniqueVintageStoryDiagnostics(report.diagnostics);
 	if (report.errors.length) return report;
 	let buffer = await zip.generateAsync({type: 'nodebuffer', compression: 'DEFLATE'});
 	if (output_path) {
@@ -829,15 +1493,37 @@ export function copyVintageStoryPackageToModsFolder(package_path, mods_folder, a
 	return report;
 }
 
+export function formatVintageStoryValidationReport(result = {}) {
+	let lines = ['Vintage Story Mod Workspace Validation', ''];
+	(result.errors || []).forEach(error => lines.push(`Error: ${error}`));
+	(result.warnings || []).forEach(warning => lines.push(`Warning: ${warning}`));
+	if (result.diagnostics?.length) {
+		if (result.errors?.length || result.warnings?.length) lines.push('');
+		lines.push('Diagnostics:');
+		result.diagnostics.forEach(issue => {
+			lines.push(formatVintageStoryDiagnostic(issue));
+			lines.push('');
+		});
+	}
+	if (!result.errors?.length && !result.warnings?.length && !result.diagnostics?.length) {
+		lines.push('No validation issues found.');
+	}
+	return lines.join('\n').trim();
+}
+
 export function formatVintageStoryExportReport(report_or_plan) {
 	if (!report_or_plan) return '';
 	if (Array.isArray(report_or_plan.entries)) {
 		let lines = ['Vintage Story Mod Export Plan', ''];
 		(report_or_plan.errors || []).forEach(error => lines.push(`Error: ${error}`));
 		(report_or_plan.warnings || []).forEach(warning => lines.push(`Warning: ${warning}`));
+		if (report_or_plan.diagnostics?.length) {
+			lines.push('Diagnostics:');
+			report_or_plan.diagnostics.forEach(issue => lines.push(formatVintageStoryDiagnostic(issue)));
+		}
 		if (report_or_plan.errors?.length || report_or_plan.warnings?.length) lines.push('');
 		report_or_plan.entries.forEach(entry => {
-			let action = entry.action || (entry.exists ? 'update' : 'write');
+			let action = entry.exists ? 'update' : (entry.action || 'write');
 			lines.push(`${action.toUpperCase()} ${entry.kind}: ${entry.targetPath}`);
 			if (entry.sourcePath) lines.push(`  source: ${entry.sourcePath}`);
 			(entry.errors || []).forEach(error => lines.push(`  error: ${error}`));
@@ -846,16 +1532,25 @@ export function formatVintageStoryExportReport(report_or_plan) {
 		return lines.join('\n');
 	}
 	let lines = ['Vintage Story Mod Export Report', ''];
-	['written', 'copied', 'skipped', 'overwritten', 'backups', 'included', 'excluded'].forEach(key => {
+	['written', 'copied', 'created', 'skipped', 'overwritten', 'backups', 'restored', 'removed', 'included', 'excluded'].forEach(key => {
 		if (report_or_plan[key]?.length) {
 			lines.push(`${key}:`);
 			report_or_plan[key].forEach(value => lines.push(`  ${value}`));
 			lines.push('');
 		}
 	});
+	if (report_or_plan.failed?.length) {
+		lines.push('failed:');
+		report_or_plan.failed.forEach(value => lines.push(`  ${value.targetPath || value.kind}: ${value.error}`));
+		lines.push('');
+	}
 	if (report_or_plan.outputPath) lines.push(`package: ${report_or_plan.outputPath}`);
 	if (report_or_plan.copiedPath) lines.push(`mods folder copy: ${report_or_plan.copiedPath}`);
 	(report_or_plan.errors || []).forEach(error => lines.push(`Error: ${error}`));
 	(report_or_plan.warnings || []).forEach(warning => lines.push(`Warning: ${warning}`));
+	if (report_or_plan.diagnostics?.length) {
+		lines.push('Diagnostics:');
+		report_or_plan.diagnostics.forEach(issue => lines.push(formatVintageStoryDiagnostic(issue)));
+	}
 	return lines.join('\n').trim();
 }

@@ -26,3 +26,17 @@ new dependencies.
 The Vintage Story model creator source trees used during planning were
 inspected as references only. Their code is not copied into Vintage Bench in
 this cleanup pass.
+
+## Vintage Story Assets
+
+Vintage Bench does not bundle proprietary Vintage Story game assets. Vintage
+Story preview references resolve files from a user-selected local Vintage Story
+installation at runtime. Bundled preview imagery is limited to placeholders,
+original UI calibration backdrops, or assets inherited from Blockbench with
+their existing notices.
+
+## Generated Declarations
+
+Generated declaration output under types/generated/ is intentionally excluded
+from source control and release packages. It can be regenerated from the
+included source tree with `npm run generate-types`.

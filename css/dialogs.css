@@ -2149,32 +2149,78 @@
 /* Validator */
 	li.validator_dialog_problem {
 		background-color: var(--color-back);
-		padding: 3px 5px;
+		padding: 6px 8px;
 		margin-bottom: 5px;
 		display: flex;
 		overflow-wrap: anywhere;
-		align-items: center;
+		align-items: flex-start;
 		border-radius: 6px;
+	}
+	li.validator_dialog_problem.validator_info > i {
+		color: var(--color-stream);
+		margin: 3px 6px 3px 4px;
+		flex-shrink: 0;
 	}
 	li.validator_dialog_problem.validator_warning > i {
 		color: var(--color-warning);
-		margin: 3px 4px;
+		margin: 3px 6px 3px 4px;
 		flex-shrink: 0;
 	}
 	li.validator_dialog_problem.validator_error > i {
 		color: var(--color-error);
-		margin: 3px 4px;
+		margin: 3px 6px 3px 4px;
 		flex-shrink: 0;
 	}
-	li.validator_dialog_problem span {
+	li.validator_dialog_problem .validator_problem_body {
 		flex-grow: 1;
 		flex-shrink: 1;
+		min-width: 0;
+	}
+	li.validator_dialog_problem .validator_problem_title {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
 		padding-top: 3px;
 		user-select: text;
+	}
+	li.validator_dialog_problem .validator_problem_title .markdown {
+		flex-grow: 1;
+	}
+	li.validator_dialog_problem .validator_problem_severity {
+		text-transform: uppercase;
+		font-size: 10px;
+		font-weight: 700;
+		letter-spacing: 0;
+		color: var(--color-light);
+		background-color: var(--color-ui);
+		border-radius: 4px;
+		padding: 1px 5px;
+		flex-shrink: 0;
+	}
+	li.validator_dialog_problem .validator_problem_details {
+		display: grid;
+		grid-template-columns: minmax(92px, max-content) minmax(0, 1fr);
+		column-gap: 10px;
+		row-gap: 2px;
+		margin-top: 5px;
+		font-size: 12px;
+		user-select: text;
+	}
+	li.validator_dialog_problem .validator_problem_detail {
+		display: contents;
+	}
+	li.validator_dialog_problem .validator_problem_detail label {
+		color: var(--color-subtle_text);
+		text-align: right;
+	}
+	li.validator_dialog_problem .validator_problem_detail span {
+		min-width: 0;
+		overflow-wrap: anywhere;
 	}
 	li.validator_dialog_problem .tool {
 		flex-shrink: 0;
 		flex-grow: 0;
+		margin-top: 2px;
 	}
 
 /* Edit History */
@@ -2686,6 +2732,247 @@
 /* Export Collision */
 	dialog#generate_bedrock_collision_box textarea.code {
 		color: #a2ebff;
+	}
+
+/* Vintage Story Texture Manager */
+	.vintage_texture_manager_panel {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 8px;
+		min-width: 0;
+	}
+	.vintage_texture_toolbar {
+		display: flex;
+		gap: 4px;
+		flex-wrap: wrap;
+	}
+	.vintage_texture_list {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		max-height: 220px;
+		overflow-y: auto;
+	}
+	.vintage_texture_list > div {
+		display: grid;
+		grid-template-columns: 42px minmax(0, 1fr);
+		gap: 8px;
+		min-height: 48px;
+		padding: 4px;
+		background: var(--color-back);
+		border: 1px solid transparent;
+		cursor: pointer;
+	}
+	.vintage_texture_list > div.selected {
+		border-color: var(--color-accent);
+		background: var(--color-ui);
+	}
+	.vintage_texture_list > div.missing .vintage_texture_summary small,
+	.vintage_texture_list > div.invalid .vintage_texture_summary small {
+		color: var(--color-error);
+	}
+	.vintage_texture_list > div.dirty .vintage_texture_summary b::after {
+		content: " *";
+		color: var(--color-accent);
+	}
+	.vintage_texture_preview {
+		width: 40px;
+		height: 40px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--color-bright_ui);
+		overflow: hidden;
+	}
+	.vintage_texture_preview img {
+		max-width: 100%;
+		max-height: 100%;
+		object-fit: contain;
+		image-rendering: pixelated;
+	}
+	.vintage_texture_summary {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+	.vintage_texture_summary b,
+	.vintage_texture_summary span,
+	.vintage_texture_summary small {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.vintage_texture_summary small {
+		color: var(--color-subtle_text);
+	}
+	.vintage_texture_fields {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+	.vintage_texture_fields label {
+		display: grid;
+		grid-template-columns: 76px minmax(0, 1fr);
+		align-items: center;
+		gap: 6px;
+	}
+	.vintage_texture_fields input {
+		min-width: 0;
+	}
+
+/* Vintage Story Asset Explorer */
+	.vintage_asset_explorer_panel {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 8px;
+		min-width: 0;
+	}
+	.vintage_asset_explorer_toolbar,
+	.vintage_asset_explorer_findbar {
+		display: flex;
+		gap: 4px;
+		flex-wrap: wrap;
+	}
+	.vintage_asset_explorer_tree {
+		max-height: 220px;
+		overflow-y: auto;
+		background: var(--color-back);
+		border: 1px solid var(--color-border);
+	}
+	.vintage_asset_explorer_tree > div {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		min-height: 24px;
+		padding-top: 2px;
+		padding-bottom: 2px;
+		padding-right: 6px;
+		cursor: pointer;
+	}
+	.vintage_asset_explorer_tree > div:hover,
+	.vintage_asset_explorer_tree > div.selected {
+		background: var(--color-ui);
+		color: var(--color-light);
+	}
+	.vintage_asset_explorer_tree > div.file span {
+		color: var(--color-text);
+	}
+	.vintage_asset_explorer_tree i {
+		font-size: 18px;
+		flex-shrink: 0;
+	}
+	.vintage_asset_explorer_tree span {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.vintage_asset_explorer_findbar .tool.selected {
+		background: var(--color-accent);
+		color: var(--color-accent_text);
+	}
+	.vintage_asset_explorer_findings {
+		display: flex;
+		flex-direction: column;
+		gap: 5px;
+		max-height: 230px;
+		overflow-y: auto;
+	}
+	.vintage_asset_explorer_heading {
+		color: var(--color-subtle_text);
+		font-weight: 700;
+		padding: 2px 0;
+	}
+	.vintage_asset_explorer_finding {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		padding: 5px;
+		background: var(--color-back);
+		border-left: 3px solid var(--color-accent);
+	}
+	.vintage_asset_explorer_finding b,
+	.vintage_asset_explorer_finding span,
+	.vintage_asset_explorer_finding small {
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.vintage_asset_explorer_finding small {
+		color: var(--color-subtle_text);
+	}
+	.vintage_asset_explorer_finding .bar {
+		margin-top: 3px;
+		display: flex;
+		gap: 4px;
+	}
+
+/* Vintage Story Shape Alternatives */
+	.vintage_shape_alternatives_panel {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 8px;
+		min-width: 0;
+	}
+	.vintage_shape_alternatives_toolbar {
+		display: flex;
+		gap: 4px;
+		flex-wrap: wrap;
+	}
+	.vintage_shape_alternatives_list {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		max-height: 220px;
+		overflow-y: auto;
+	}
+	.vintage_shape_alternatives_list > div {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		padding: 5px;
+		background: var(--color-back);
+		border: 1px solid transparent;
+		cursor: pointer;
+	}
+	.vintage_shape_alternatives_list > div.selected {
+		border-color: var(--color-accent);
+		background: var(--color-ui);
+	}
+	.vintage_shape_alternatives_list > div.missing small,
+	.vintage_shape_alternatives_list > div.invalid small {
+		color: var(--color-error);
+	}
+	.vintage_shape_alternatives_list > div.dirty b::after {
+		content: " *";
+		color: var(--color-accent);
+	}
+	.vintage_shape_alternatives_list b,
+	.vintage_shape_alternatives_list span,
+	.vintage_shape_alternatives_list small {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.vintage_shape_alternatives_list small {
+		color: var(--color-subtle_text);
+	}
+	.vintage_shape_alternatives_fields {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+	.vintage_shape_alternatives_fields label {
+		display: grid;
+		grid-template-columns: 76px minmax(0, 1fr);
+		align-items: center;
+		gap: 6px;
+	}
+	.vintage_shape_alternatives_fields input {
+		min-width: 0;
 	}
 
 /* Predicate Overrides */

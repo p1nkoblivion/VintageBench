@@ -8,7 +8,7 @@ new ModelFormat('free', {
 	format_page: {
 		content: [
 			{type: 'h3', text: tl('mode.start.format.informations')},
-			{text: 'Cuboid editing base for Vintage Bench. Saves and opens Vintage Story shape JSON. TODO: add Vintage Story-specific display and validation tools.'}
+			{text: 'Create or open Vintage Story shape JSON for cuboid models. Use the Vintage Story asset tools for item/block context, variants and ByType maps, textures, display transforms, interaction boxes, attachments, alternates, advanced JSON, validation, backups, and mod workspace packaging.'}
 		]
 	},
 	rotate_cubes: true,

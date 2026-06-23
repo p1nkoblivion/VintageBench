@@ -205,6 +205,28 @@ function buildVariantFromParts(base_code, ordered_parts, source_index) {
 	};
 }
 
+function isByTypeKey(key) {
+	return String(key || '').toLowerCase().endsWith('bytype');
+}
+
+function byTypeTargetKey(key) {
+	return String(key || '').substring(0, String(key || '').length - 'byType'.length);
+}
+
+function makePathString(path) {
+	let output = 'root';
+	path.forEach(part => {
+		if (typeof part === 'number') {
+			output += `[${part}]`;
+		} else if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(part)) {
+			output += `.${part}`;
+		} else {
+			output += `[${JSON.stringify(part)}]`;
+		}
+	});
+	return output;
+}
+
 export function expandVintageStoryVariants(asset_object, options = {}) {
 	let fallback_domain = options.domain || 'game';
 	let base_location = splitAssetLocation(asset_object?.code ?? asset_object?.Code ?? 'unknown', fallback_domain);
@@ -300,6 +322,50 @@ export function resolveByTypeMap(map, code_path) {
 	return best;
 }
 
+export function collectResolvedByTypeSources(object, code_path, path = [], output = []) {
+	if (Array.isArray(object)) {
+		object.forEach((entry, index) => collectResolvedByTypeSources(entry, code_path, path.concat(index), output));
+		return output;
+	}
+	if (!isPlainObject(object)) return output;
+
+	let matched_values = [];
+	for (let key of Object.keys(object)) {
+		if (!isByTypeKey(key)) continue;
+		let match = resolveByTypeMap(object[key], code_path);
+		if (!match) continue;
+		let map_path = path.concat(key);
+		let matched_path = map_path.concat(match.matchedPattern);
+		let target_key = byTypeTargetKey(key);
+		output.push({
+			sourceMapPath: makePathString(map_path),
+			sourcePath: `${makePathString(map_path)}[${JSON.stringify(match.matchedPattern)}]`,
+			targetPath: makePathString(path.concat(target_key)),
+			mapPath: cloneJSON(map_path),
+			targetPathParts: path.concat(target_key),
+			matchedPath: matched_path,
+			mapKey: key,
+			targetKey: target_key,
+			matchedPattern: match.matchedPattern,
+			sourceIndex: match.sourceIndex,
+			exact: match.exact,
+			fallback: match.fallback,
+			inherited: match.inherited,
+			isByType: true
+		});
+		if (isPlainObject(match.value) || Array.isArray(match.value)) {
+			matched_values.push({value: match.value, path: matched_path});
+		}
+	}
+
+	for (let key of Object.keys(object)) {
+		if (isByTypeKey(key)) continue;
+		collectResolvedByTypeSources(object[key], code_path, path.concat(key), output);
+	}
+	matched_values.forEach(entry => collectResolvedByTypeSources(entry.value, code_path, entry.path, output));
+	return output;
+}
+
 export function deepMergeObjects(base, overlay) {
 	if (!isPlainObject(base)) return cloneJSON(overlay);
 	if (!isPlainObject(overlay)) return cloneJSON(overlay);
@@ -323,9 +389,8 @@ export function resolveByTypeIntoObject(object, code_path, states = {}, path = [
 	let output = cloneJSON(object);
 	let resolved_maps = [];
 	for (let key of Object.keys(output)) {
-		if (!key.toLowerCase().endsWith('bytype')) continue;
-		let target_key = key.substring(0, key.length - 'byType'.length);
-		if (target_key === key) target_key = key.substring(0, key.length - 'bytype'.length);
+		if (!isByTypeKey(key) || !isPlainObject(output[key])) continue;
+		let target_key = byTypeTargetKey(key);
 		let match = resolveByTypeMap(output[key], code_path);
 		resolved_maps.push({key, target_key, match});
 	}

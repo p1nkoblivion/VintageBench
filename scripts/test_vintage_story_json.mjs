@@ -23,8 +23,15 @@ import {
 import {
 	applyTransformEditToAssetObject,
 	listVintageStoryAssetVariants,
+	resolveAssetBasePath,
+	resolveVintageStoryTextureAliases,
 	resolveVintageStoryAssetVariant
 } from '../js/vintagestory/vs_asset_resolver.js';
+import {
+	collectResolvedByTypeSources,
+	resolveByTypeIntoObject,
+	resolveByTypeMap
+} from '../js/vintagestory/vs_variant_resolver.js';
 import {
 	applyInteractionBoxEditToAssetObject,
 	interactionBoxFromModelBounds,
@@ -37,6 +44,15 @@ import {
 	makeAttachmentEditSource,
 	validateVintageStoryAttachment
 } from '../js/vintagestory/vs_entity_attachments.js';
+import {
+	applyTextureOverrideToAssetObject,
+	collectVintageStoryTextureEntries,
+	copyTextureIntoWorkspace,
+	makeTextureEditSource,
+	textureAssetBaseFromFilePath,
+	updateTextureEntryBase,
+	validateVintageStoryTextureEntries
+} from '../js/vintagestory/vs_texture_manager.js';
 import {
 	SAVE_AS_ASSET_ATTACHMENT_MODES,
 	SAVE_AS_ASSET_BEHAVIOR_BOX_MODES,
@@ -72,6 +88,7 @@ import {
 	applyVintageStoryPresetPatchToAsset,
 	buildVintageStoryPresetAssetPatch,
 	buildVintageStoryPresetFormPatch,
+	getSaveAsAssetPresetOptions,
 	getVintageStoryAssetPresets,
 	previewVintageStoryPresetPatch
 } from '../js/vintagestory/vs_asset_presets.js';
@@ -79,13 +96,49 @@ import {
 	buildVintageStoryModInfo,
 	copyVintageStoryPackageToModsFolder,
 	createVintageStoryExportPlan,
+	createVintageStoryExportPlanFromResolvedContext,
 	defaultVintageStoryPackageName,
 	executeVintageStoryExportPlan,
+	formatVintageStoryExportReport,
+	formatVintageStoryValidationReport,
 	packageVintageStoryModWorkspace,
 	parseVintageStoryDependencyText,
 	validateVintageStoryModInfo,
 	validateVintageStoryWorkspace
 } from '../js/vintagestory/vs_mod_exporter.js';
+import {
+	clearVintageStoryDirtyFilesWrittenByReport,
+	collectVintageStoryDirtyRecords,
+	markVintageStoryExportPlanDirty,
+	setVintageStoryDirty,
+	VINTAGE_STORY_DIRTY_KINDS
+} from '../js/vintagestory/vs_dirty_state.js';
+import {
+	parseVintageStoryBackupPath,
+	restoreVintageStoryBackup,
+	writeVintageStoryTextFile
+} from '../js/vintagestory/vs_file_write_safety.js';
+import {
+	collectVintageStoryPreservedFields,
+	collectVintageStoryTransformMaps,
+	formatVintageStoryAdvancedJson,
+	formatVintageStoryPreservedFields,
+	getVintageStoryAdvancedAssetSections,
+	getVintageStoryAdvancedSectionValue,
+	makeVintageStoryAdvancedEditPreview,
+	makeVintageStoryAdvancedRootEditPreview,
+	makeVintageStoryJsonDiff
+} from '../js/vintagestory/vs_advanced_json.js';
+import {
+	buildVintageStoryAssetExplorer,
+	getVintageStoryAssetExplorerFindingGroups
+} from '../js/vintagestory/vs_asset_explorer.js';
+import {
+	applyShapeAlternativesToAssetObject,
+	cloneVintageStoryShapeAlternatives,
+	makeShapeAlternativeFromBase,
+	validateVintageStoryShapeAlternatives
+} from '../js/vintagestory/vs_shape_alternatives.js';
 
 const {join} = PathModule;
 const fixtureRoot = join(process.cwd(), 'test', 'fixtures', 'vintage_story_json');
@@ -146,6 +199,25 @@ async function resolveAssetSuiteVariant(relative_path, variant_code) {
 
 function stableClone(value) {
 	return JSON.parse(JSON.stringify(value));
+}
+
+function assertDetailedDiagnostic(issue) {
+	assert.ok(issue, 'diagnostic should exist');
+	assert.equal(['info', 'warning', 'error'].includes(issue.severity), true);
+	assert.equal(typeof issue.filePath, 'string');
+	assert.notEqual(issue.filePath.length, 0);
+	assert.equal(typeof issue.jsonPath, 'string');
+	assert.notEqual(issue.jsonPath.length, 0);
+	assert.equal(typeof issue.variantCode, 'string');
+	assert.notEqual(issue.variantCode.length, 0);
+	assert.equal(typeof issue.what, 'string');
+	assert.notEqual(issue.what.length, 0);
+	assert.equal(typeof issue.why, 'string');
+	assert.notEqual(issue.why.length, 0);
+	assert.equal(typeof issue.suggestedFix, 'string');
+	assert.notEqual(issue.suggestedFix.length, 0);
+	assert.equal(typeof issue.blocks, 'string');
+	assert.notEqual(issue.blocks.length, 0);
 }
 
 function installVintageStoryShapeRoundTripMocks() {
@@ -379,29 +451,34 @@ assert.deepEqual(complexShapeReopened, complexRoundTripShape, 'complex shape imp
 const transformShape = await readFixture('display_transforms_all.json');
 let transformWarnings = [];
 let displaySlots = collectVintageStoryDisplayTransformsFromModel(transformShape, transformWarnings);
-assert.equal(getVintageStoryDisplaySlotId('fpHandTransform'), 'tpHandTransform');
-assert.equal(getVintageStoryDisplaySlotId('fpOffHandTransform'), 'tpOffHandTransform');
+assert.equal(getVintageStoryDisplaySlotId('fpHandTransform'), 'fpHandTransform');
+assert.equal(getVintageStoryDisplaySlotId('fpOffHandTransform'), 'fpHandTransform');
 assert.deepEqual(displaySlots.guiTransform.translation, [1, 2, 3]);
 assert.deepEqual(displaySlots.guiTransform.rotation, [10, 20, 30]);
 assert.deepEqual(displaySlots.guiTransform.origin, [0.5, 0.5, 0.5]);
 assert.deepEqual(displaySlots.guiTransform.scale, [1.25, 1.25, 1.25]);
-assert.equal(displaySlots.fpHandTransform, undefined);
+assert.deepEqual(displaySlots.fpHandTransform.translation, [3, 4, 5]);
+assert.deepEqual(displaySlots.fpHandTransform.origin, [0.25, 0.5, 0.75]);
+assert.equal(displaySlots.fpHandTransform.scale[0], 1.4);
 assert.equal(displaySlots.fpOffHandTransform, undefined);
 assert.deepEqual(displaySlots.tpHandTransform.translation, [-1, 0, 2]);
 assert.deepEqual(displaySlots.tpOffHandTransform.translation, [2, 0, -1]);
 assert.equal(displaySlots.toolrackTransform.scale[0], 0.75);
 assert.equal(displaySlots.onshelfTransform.translation[2], 0.75);
+assert.equal(displaySlots.inFirePitPropsTransform.scale[0], 0.6);
 
-let exportedTransforms = {attributes: {}};
+let exportedTransforms = {attributes: {inFirePitProps: {burnTemperature: 800}}};
 applyVintageStoryDisplayTransformsToModel(exportedTransforms, displaySlots);
 assert.equal(exportedTransforms.guiTransform.scale, 1.25);
 assert.deepEqual(exportedTransforms.guiTransform.origin, {x: 0.5, y: 0.5, z: 0.5});
-assert.equal(exportedTransforms.fpHandTransform, undefined);
+assert.equal(exportedTransforms.fpHandTransform.scale, 1.4);
 assert.equal(exportedTransforms.tpHandTransform.translation.x, -1);
 assert.equal(exportedTransforms.tpOffHandTransform.translation.x, 2);
 assert.equal(exportedTransforms.attributes.toolrackTransform.scale, 0.75);
 assert.equal(exportedTransforms.attributes.onshelfTransform.rotation.y, 90);
 assert.equal(exportedTransforms.attributes.inForgeTransform.origin.x, 0.25);
+assert.equal(exportedTransforms.attributes.inFirePitProps.burnTemperature, 800);
+assert.equal(exportedTransforms.attributes.inFirePitProps.transform.scale, 0.6);
 
 const unknownTransformShape = await readFixture('display_transforms_unknown.json');
 let unknownWarnings = [];
@@ -427,6 +504,116 @@ const bladeAssetText = await readFile(bladeAssetPath, 'utf8');
 const bladeDocument = parseVintageStoryAssetDocument(bladeAssetText, bladeAssetPath);
 assert.equal(bladeDocument.assetObjects.length, 1);
 assert.equal(bladeDocument.assetObjects[0].object.code, 'blade');
+const bladeAdvancedAsset = stableClone(bladeDocument.assetObjects[0].object);
+bladeAdvancedAsset.attackpowerbytype = {'blade-falx-*': 3.75};
+bladeAdvancedAsset.handbook = {groupBy: ['blade']};
+bladeAdvancedAsset.customModField = {keep: true};
+bladeAdvancedAsset.fpHandTransformByType = {'*': {translation: {x: 0, y: 1, z: 2}, scale: 1.1}};
+bladeAdvancedAsset.toolrackTransformByType = {'*': {translation: {x: 2, y: 1, z: 0}, scale: 0.65}};
+bladeAdvancedAsset.attributes.inFirePitPropsByType = {'*': {cookTime: 12, transform: {scale: 0.8}}};
+const advancedSections = getVintageStoryAdvancedAssetSections(bladeAdvancedAsset);
+assert.ok(advancedSections.some(section => section.id === 'root'), 'advanced root JSON editor section should exist');
+assert.ok(advancedSections.some(section => section.id === 'attributes'), 'advanced attributes editor section should exist');
+assert.ok(advancedSections.some(section => section.id === 'attributesByType'), 'advanced attributesByType editor section should exist');
+assert.ok(advancedSections.some(section => section.id === 'behaviors'), 'advanced behaviors editor section should exist');
+assert.ok(advancedSections.some(section => section.id === 'transformMaps'), 'advanced transform map editor section should exist');
+assert.ok(advancedSections.some(section => section.id === 'behaviorProperties:0'), 'advanced behavior properties editor section should exist');
+const preservedAdvancedFields = collectVintageStoryPreservedFields(bladeAdvancedAsset);
+assert.ok(preservedAdvancedFields.some(field => field.jsonPath === 'root.attackpowerbytype'), 'known combat ByType fields should be visible as preserved');
+assert.ok(preservedAdvancedFields.some(field => field.jsonPath === 'root.handbook'), 'known handbook fields should be visible as preserved');
+assert.ok(preservedAdvancedFields.some(field => field.jsonPath === 'root.customModField'), 'custom root fields should be visible as preserved');
+assert.ok(preservedAdvancedFields.some(field => field.jsonPath === 'root.attributesByType["blade-falx-*"]'), 'attributesByType entries should be visible as preserved');
+assert.ok(preservedAdvancedFields.some(field => field.jsonPath === 'root.behaviors[0].properties.layout'), 'behavior properties should be visible as preserved');
+assert.ok(formatVintageStoryPreservedFields(preservedAdvancedFields).includes('root.attackpowerbytype'));
+const bladeAttributesByType = stableClone(getVintageStoryAdvancedSectionValue(bladeAdvancedAsset, 'attributesByType'));
+bladeAttributesByType['blade-falx-copper'] = {
+	ripHarvest: false,
+	attachableToEntity: {
+		categoryCode: 'weaponfalx-advanced',
+		keepAdvancedField: {nested: true}
+	}
+};
+const attributesByTypePreview = makeVintageStoryAdvancedEditPreview(
+	bladeAdvancedAsset,
+	'attributesByType',
+	formatVintageStoryAdvancedJson(bladeAttributesByType)
+);
+assert.equal(attributesByTypePreview.errors.length, 0);
+assert.equal(attributesByTypePreview.changed, true);
+assert.equal(attributesByTypePreview.diff.includes('--- before'), true);
+assert.equal(attributesByTypePreview.diff.includes('+++ after'), true);
+assert.equal(attributesByTypePreview.afterAsset.attributesByType['blade-falx-*'].ripHarvest, true);
+assert.equal(attributesByTypePreview.afterAsset.attributesByType['blade-falx-copper'].attachableToEntity.categoryCode, 'weaponfalx-advanced');
+assert.deepEqual(attributesByTypePreview.afterAsset.behaviors, bladeAdvancedAsset.behaviors, 'attributesByType advanced edit should preserve unrelated behaviors');
+const behaviorProperties = stableClone(getVintageStoryAdvancedSectionValue(bladeAdvancedAsset, 'behaviorProperties:0'));
+behaviorProperties.selectionBox.y2 = 0.35;
+behaviorProperties.customBehaviorData = {keep: 'yes'};
+const behaviorPreview = makeVintageStoryAdvancedEditPreview(
+	bladeAdvancedAsset,
+	'behaviorProperties:0',
+	formatVintageStoryAdvancedJson(behaviorProperties)
+);
+assert.equal(behaviorPreview.errors.length, 0);
+assert.equal(behaviorPreview.afterAsset.behaviors[0].properties.selectionBox.y2, 0.35);
+assert.equal(behaviorPreview.afterAsset.behaviors[0].properties.customBehaviorData.keep, 'yes');
+assert.deepEqual(behaviorPreview.afterAsset.attributesByType, bladeAdvancedAsset.attributesByType, 'behavior property advanced edit should preserve attributesByType');
+const transformMaps = collectVintageStoryTransformMaps(bladeAdvancedAsset);
+assert.ok(transformMaps.guiTransformByType, 'root transform ByType map should be editable');
+assert.ok(transformMaps.fpHandTransformByType, 'first-person transform ByType map should be editable');
+assert.ok(transformMaps.toolrackTransformByType, 'root toolrack transform ByType map should be editable');
+assert.ok(transformMaps['attributes.toolrackTransformByType'], 'attributes transform ByType map should be editable');
+assert.ok(transformMaps['attributes.inFirePitPropsByType'], 'nested firepit transform ByType map should be editable');
+transformMaps.guiTransformByType['blade-falx-copper'] = {
+	translation: {x: 11, y: 12, z: 13},
+	scale: 1.25
+};
+transformMaps.fpHandTransformByType['blade-falx-copper'] = {
+	translation: {x: 1, y: 1, z: 1},
+	scale: 1.35
+};
+transformMaps.toolrackTransformByType['blade-falx-copper'] = {
+	translation: {x: 3, y: 3, z: 3},
+	scale: 0.85
+};
+transformMaps['attributes.toolrackTransformByType']['blade-falx-copper'] = {
+	translation: {x: 5, y: 5, z: 5},
+	scale: 0.95
+};
+transformMaps['attributes.inFirePitPropsByType']['blade-falx-copper'] = {
+	cookTime: 6,
+	transform: {translation: {x: 6, y: 5, z: 4}, scale: 0.7}
+};
+const transformPreview = makeVintageStoryAdvancedEditPreview(
+	bladeAdvancedAsset,
+	'transformMaps',
+	formatVintageStoryAdvancedJson(transformMaps)
+);
+assert.equal(transformPreview.errors.length, 0);
+assert.equal(transformPreview.afterAsset.guiTransformByType['blade-falx-copper'].translation.x, 11);
+assert.equal(transformPreview.afterAsset.fpHandTransformByType['blade-falx-copper'].scale, 1.35);
+assert.equal(transformPreview.afterAsset.toolrackTransformByType['blade-falx-copper'].scale, 0.85);
+assert.equal(transformPreview.afterAsset.attributes.toolrackTransformByType['blade-falx-copper'].scale, 0.95);
+assert.equal(transformPreview.afterAsset.attributes.inFirePitPropsByType['blade-falx-copper'].transform.translation.x, 6);
+assert.equal(transformPreview.afterAsset.attributes.inFirePitPropsByType['*'].cookTime, 12);
+assert.deepEqual(transformPreview.afterAsset.attributesByType, bladeAdvancedAsset.attributesByType, 'transform map advanced edit should preserve non-transform attributesByType');
+const rootEditedAdvancedAsset = stableClone(bladeAdvancedAsset);
+rootEditedAdvancedAsset.customModField.extra = 'edited';
+const rootPreview = makeVintageStoryAdvancedEditPreview(bladeAdvancedAsset, 'root', formatVintageStoryAdvancedJson(rootEditedAdvancedAsset));
+assert.equal(rootPreview.errors.length, 0);
+assert.equal(rootPreview.afterAsset.customModField.extra, 'edited');
+assert.deepEqual(rootPreview.afterAsset.attributesByType['blade-falx-*'].attachableToEntity, bladeAdvancedAsset.attributesByType['blade-falx-*'].attachableToEntity);
+const invalidAdvancedPreview = makeVintageStoryAdvancedEditPreview(bladeAdvancedAsset, 'attributes', '[]');
+assert.equal(invalidAdvancedPreview.errors.some(error => error.includes('must be a JSON object')), true);
+const modInfoAdvancedPreview = makeVintageStoryAdvancedRootEditPreview(
+	{type: 'content', modid: 'test', name: 'Test', authors: ['P1nkOblivion'], version: '1.0.0', dependencies: {game: ''}, custom: {keep: true}},
+	'{ type: "content", modid: "test", name: "Test", authors: ["P1nkOblivion"], version: "1.0.1", dependencies: { game: "" }, custom: { keep: true, edited: true } }',
+	'modinfo.json'
+);
+assert.equal(modInfoAdvancedPreview.errors.length, 0);
+assert.equal(modInfoAdvancedPreview.changed, true);
+assert.equal(modInfoAdvancedPreview.afterRoot.version, '1.0.1');
+assert.equal(modInfoAdvancedPreview.afterRoot.custom.edited, true);
+assert.equal(makeVintageStoryJsonDiff('{"a":1}\n', '{"a":2}\n').includes('-{"a":1}'), true);
 
 const multipleDocument = parseVintageStoryAssetDocument(
 	await readFile(join(assetFixtureRoot, 'multiple_assets.json'), 'utf8'),
@@ -484,9 +671,231 @@ assert.equal(allowedSkipByCode.get('allowedskip-alpha-iron').skipped, true);
 assert.equal(allowedSkipByCode.get('allowedskip-beta-copper').disallowed, true);
 assert.equal(allowedSkipByCode.get('allowedskip-beta-iron').included, true);
 
+const resolverOrderAsset = {
+	code: 'resolver-order',
+	variantgroups: [
+		{code: 'type', states: ['plain', 'fancy']},
+		{code: 'metal', states: ['copper', 'iron']}
+	],
+	allowedVariants: ['resolver-order-plain-*', 'resolver-order-fancy-iron'],
+	skipVariants: ['resolver-order-plain-copper'],
+	shape: {base: 'item/variant/default'}
+};
+const resolverOrderDocument = {
+	root: resolverOrderAsset,
+	assetObjects: [{object: resolverOrderAsset}],
+	filePath: join(assetSuiteRoot, 'synthetic_mod', 'assets', 'synthetic', 'itemtypes', 'resolver_order.json')
+};
+const resolverOrderVariants = listVintageStoryAssetVariants(resolverOrderDocument, 0);
+assert.deepEqual(resolverOrderVariants.allVariants.map(variant => variant.variantCode), [
+	'resolver-order-plain-copper',
+	'resolver-order-fancy-copper',
+	'resolver-order-plain-iron',
+	'resolver-order-fancy-iron'
+]);
+assert.deepEqual(resolverOrderVariants.includedVariants.map(variant => variant.variantCode), [
+	'resolver-order-plain-iron',
+	'resolver-order-fancy-iron'
+]);
+const resolverOrderByCode = new Map(resolverOrderVariants.allVariants.map(variant => [variant.variantCode, variant]));
+assert.equal(resolverOrderByCode.get('resolver-order-plain-copper').skipped, true);
+assert.equal(resolverOrderByCode.get('resolver-order-plain-copper').included, false);
+assert.equal(resolverOrderByCode.get('resolver-order-fancy-copper').disallowed, true);
+assert.equal(resolverOrderByCode.get('resolver-order-fancy-copper').included, false);
+
+const priorityByTypeMap = {
+	'*': 'fallback',
+	'resolver-order-*': 'broad',
+	'resolver-order-plain-*': 'specific',
+	'resolver-order-plain-iron': 'exact'
+};
+assert.equal(resolveByTypeMap(priorityByTypeMap, 'resolver-order-plain-iron').matchedPattern, 'resolver-order-plain-iron');
+assert.equal(resolveByTypeMap(priorityByTypeMap, 'resolver-order-plain-copper').matchedPattern, 'resolver-order-plain-*');
+assert.equal(resolveByTypeMap(priorityByTypeMap, 'resolver-order-fancy-copper').matchedPattern, 'resolver-order-*');
+assert.equal(resolveByTypeMap({'*': 'fallback'}, 'resolver-order-admin-gold').fallback, true);
+for (let i = 0; i < 5; i++) {
+	assert.equal(resolveByTypeMap({'a*c': 'first', 'ab*': 'second'}, 'abc').matchedPattern, 'a*c');
+}
+
+const resolverCoreAsset = {
+	code: 'resolver-order',
+	variantgroups: resolverOrderAsset.variantgroups,
+	shapeByType: {
+		'*': {base: 'item/variant/default'},
+		'resolver-order-plain-*': {base: 'item/variant/blue'},
+		'resolver-order-plain-iron': {base: 'item/variant/red'}
+	},
+	textures: {
+		trim: {base: 'item/bytype/trim'}
+	},
+	texturesByType: {
+		'*': {outside: {base: 'item/bytype/fallback'}},
+		'resolver-order-*': {outside: {base: 'item/bytype/green'}},
+		'resolver-order-plain-*': {outside: {base: 'item/bytype/blue'}}
+	},
+	creativeinventoryByType: {
+		'*': {general: ['fallback']},
+		'resolver-order-plain-*': {general: ['specific']}
+	},
+	attributes: {
+		directOnly: true,
+		nested: {base: true},
+		inFirePitProps: {
+			burnTemperature: 500,
+			transform: {scale: 0.4, origin: {x: 0.1, y: 0.2, z: 0.3}}
+		},
+		inFirePitPropsByType: {
+			'*': {burnTemperature: 700, transform: {scale: 0.6}},
+			'resolver-order-plain-*': {transform: {translation: {x: 3, y: 2, z: 1}}}
+		}
+	},
+	attributesByType: {
+		'resolver-order-plain-*': {
+			ripHarvest: true,
+			nested: {fromByType: true},
+			attachableToEntityByType: {
+				'*': {categoryCode: 'fallback'},
+				'resolver-order-plain-*': {categoryCode: 'plain'}
+			}
+		}
+	},
+	collisionboxByType: {
+		'*': {x1: 0, y1: 0, z1: 0, x2: 1, y2: 1, z2: 1},
+		'resolver-order-plain-*': {x1: 0, y1: 0, z1: 0, x2: 0.5, y2: 0.5, z2: 0.5}
+	},
+	selectionboxByType: {
+		'*': {x1: 0, y1: 0, z1: 0, x2: 1, y2: 1, z2: 1},
+		'resolver-order-plain-iron': {x1: 0.1, y1: 0, z1: 0.1, x2: 0.9, y2: 0.8, z2: 0.9}
+	},
+	guiTransformByType: {
+		'*': {scale: 0.5},
+		'resolver-order-plain-*': {scale: 1.25}
+	},
+	groundTransformByType: {
+		'*': {translation: {x: 0, y: 1, z: 0}}
+	},
+	tpHandTransformByType: {
+		'resolver-order-plain-*': {rotation: {x: 90, y: 0, z: 0}}
+	},
+	fpHandTransformByType: {
+		'resolver-order-plain-*': {scale: 1.75}
+	},
+	toolrackTransformByType: {
+		'*': {scale: 1.2}
+	},
+	attackpowerbytype: {
+		'*': 1,
+		'resolver-order-plain-*': 4
+	},
+	durabilitybytype: {
+		'*': 10,
+		'resolver-order-plain-iron': 50
+	},
+	tooltierbytype: {
+		'*': 1,
+		'resolver-order-plain-*': 2
+	},
+	customUnknownByType: {
+		'*': {name: 'fallback'},
+		'resolver-order-plain-*': {name: 'specific', path: '{type}/{metal}'}
+	},
+	nested: {
+		customNestedByType: {
+			'*': 'nested-fallback',
+			'resolver-order-plain-*': 'nested-specific'
+		}
+	}
+};
+const resolverCoreRuntime = resolveByTypeIntoObject(resolverCoreAsset, 'resolver-order-plain-iron', {type: 'plain', metal: 'iron'});
+assert.equal(resolverCoreRuntime.shape.base, 'item/variant/red');
+assert.equal(resolverCoreRuntime.textures.outside.base, 'item/bytype/blue');
+assert.equal(resolverCoreRuntime.textures.trim.base, 'item/bytype/trim');
+assert.deepEqual(resolverCoreRuntime.creativeinventory.general, ['specific']);
+assert.equal(resolverCoreRuntime.attributes.directOnly, true);
+assert.equal(resolverCoreRuntime.attributes.ripHarvest, true);
+assert.equal(resolverCoreRuntime.attributes.nested.base, true);
+assert.equal(resolverCoreRuntime.attributes.nested.fromByType, true);
+assert.equal(resolverCoreRuntime.collisionbox.x2, 0.5);
+assert.equal(resolverCoreRuntime.selectionbox.x1, 0.1);
+assert.equal(resolverCoreRuntime.guiTransform.scale, 1.25);
+assert.equal(resolverCoreRuntime.groundTransform.translation.y, 1);
+assert.equal(resolverCoreRuntime.tpHandTransform.rotation.x, 90);
+assert.equal(resolverCoreRuntime.fpHandTransform.scale, 1.75);
+assert.equal(resolverCoreRuntime.toolrackTransform.scale, 1.2);
+assert.equal(resolverCoreRuntime.attributes.inFirePitProps.burnTemperature, 500);
+assert.equal(resolverCoreRuntime.attributes.inFirePitProps.transform.translation.x, 3);
+assert.equal(resolverCoreRuntime.attributes.inFirePitProps.transform.scale, 0.4);
+assert.equal(resolverCoreRuntime.attackpower, 4);
+assert.equal(resolverCoreRuntime.durability, 50);
+assert.equal(resolverCoreRuntime.tooltier, 2);
+assert.equal(resolverCoreRuntime.customUnknown.name, 'specific');
+assert.equal(resolverCoreRuntime.customUnknown.path, 'plain/iron');
+assert.equal(resolverCoreRuntime.nested.customNested, 'nested-specific');
+assert.equal(resolverCoreRuntime.shapeByType, undefined);
+assert.equal(resolverCoreRuntime.customUnknownByType, undefined);
+
+const resolverCoreSources = collectResolvedByTypeSources(resolverCoreAsset, 'resolver-order-plain-iron');
+const resolverCoreSourceByMap = new Map(resolverCoreSources.map(source => [source.sourceMapPath, source]));
+assert.equal(resolverCoreSourceByMap.get('root.shapeByType').sourcePath, 'root.shapeByType["resolver-order-plain-iron"]');
+assert.equal(resolverCoreSourceByMap.get('root.texturesByType').sourcePath, 'root.texturesByType["resolver-order-plain-*"]');
+assert.equal(resolverCoreSourceByMap.get('root.creativeinventoryByType').targetPath, 'root.creativeinventory');
+assert.equal(resolverCoreSourceByMap.get('root.attributesByType').targetPath, 'root.attributes');
+assert.equal(resolverCoreSourceByMap.get('root.collisionboxByType').targetPath, 'root.collisionbox');
+assert.equal(resolverCoreSourceByMap.get('root.selectionboxByType').targetPath, 'root.selectionbox');
+assert.equal(resolverCoreSourceByMap.get('root.guiTransformByType').targetPath, 'root.guiTransform');
+assert.equal(resolverCoreSourceByMap.get('root.groundTransformByType').targetPath, 'root.groundTransform');
+assert.equal(resolverCoreSourceByMap.get('root.tpHandTransformByType').targetPath, 'root.tpHandTransform');
+assert.equal(resolverCoreSourceByMap.get('root.fpHandTransformByType').targetPath, 'root.fpHandTransform');
+assert.equal(resolverCoreSourceByMap.get('root.toolrackTransformByType').targetPath, 'root.toolrackTransform');
+assert.equal(resolverCoreSourceByMap.get('root.attributes.inFirePitPropsByType').targetPath, 'root.attributes.inFirePitProps');
+assert.equal(resolverCoreSourceByMap.get('root.attackpowerbytype').targetPath, 'root.attackpower');
+assert.equal(resolverCoreSourceByMap.get('root.durabilitybytype').targetPath, 'root.durability');
+assert.equal(resolverCoreSourceByMap.get('root.tooltierbytype').targetPath, 'root.tooltier');
+assert.equal(resolverCoreSourceByMap.get('root.customUnknownByType').targetPath, 'root.customUnknown');
+assert.equal(resolverCoreSourceByMap.get('root.nested.customNestedByType').targetPath, 'root.nested.customNested');
+assert.equal(
+	resolverCoreSourceByMap.get('root.attributesByType["resolver-order-plain-*"].attachableToEntityByType').sourcePath,
+	'root.attributesByType["resolver-order-plain-*"].attachableToEntityByType["resolver-order-plain-*"]'
+);
+
+const resolverCoreFilePath = join(assetSuiteRoot, 'synthetic_mod', 'assets', 'synthetic', 'itemtypes', 'resolver_core.json');
+const resolverCoreDocument = {
+	root: resolverCoreAsset,
+	assetObjects: [{object: resolverCoreAsset}],
+	filePath: resolverCoreFilePath
+};
+const resolverCoreVariant = listVintageStoryAssetVariants(resolverCoreDocument, 0)
+	.allVariants.find(variant => variant.variantCode === 'resolver-order-plain-iron');
+const resolverCoreResolved = resolveVintageStoryAssetVariant(resolverCoreDocument, 0, resolverCoreVariant, assetSuiteResolverOptions(resolverCoreFilePath));
+assert.equal(resolverCoreResolved.byTypeSources.find(source => source.sourceMapPath === 'root.customUnknownByType').sourcePath, 'root.customUnknownByType["resolver-order-plain-*"]');
+assert.equal(resolverCoreResolved.byTypeSources.find(source => source.sourceMapPath === 'root.attackpowerbytype').sourceIndex, 1);
+assert.equal(resolverCoreResolved.transforms.fpHandTransform.sourcePath, 'root.fpHandTransformByType["resolver-order-plain-*"]');
+assert.equal(resolverCoreResolved.transforms.fpHandTransform.value.scale, 1.75);
+assert.equal(resolverCoreResolved.transforms.toolrackTransform.sourcePath, 'root.toolrackTransformByType["*"]');
+assert.equal(resolverCoreResolved.transforms.toolrackTransform.value.scale, 1.2);
+assert.equal(resolverCoreResolved.transforms.inFirePitPropsTransform.sourceMapPath, 'root.attributes.inFirePitPropsByType');
+assert.equal(resolverCoreResolved.transforms.inFirePitPropsTransform.sourcePath, 'root.attributes.inFirePitPropsByType["resolver-order-plain-*"].transform');
+assert.equal(resolverCoreResolved.transforms.inFirePitPropsTransform.value.translation.x, 3);
+assert.equal(resolverCoreResolved.transforms.inFirePitPropsTransform.value.scale, 0.4);
+const resolverFirepitEditAsset = stableClone(resolverCoreAsset);
+assert.equal(applyTransformEditToAssetObject(resolverFirepitEditAsset, resolverCoreResolved.transforms.inFirePitPropsTransform, {
+	translation: {x: 9, y: 8, z: 7},
+	scale: 0.95
+}), true);
+assert.equal(resolverFirepitEditAsset.attributes.inFirePitPropsByType['resolver-order-plain-iron'].transform.scale, 0.95);
+assert.equal(resolverFirepitEditAsset.attributes.inFirePitPropsByType['resolver-order-plain-*'].transform.translation.x, 3);
+assert.equal(resolverFirepitEditAsset.attributes.inFirePitPropsByType['resolver-order-plain-iron'].burnTemperature, undefined);
+const resolverFirepitSharedAsset = stableClone(resolverCoreAsset);
+const resolverFirepitSharedSource = stableClone(resolverCoreResolved.transforms.inFirePitPropsTransform);
+resolverFirepitSharedSource.editTargetKey = resolverFirepitSharedSource.matchedPattern;
+assert.equal(applyTransformEditToAssetObject(resolverFirepitSharedAsset, resolverFirepitSharedSource, {scale: 0.55}), true);
+assert.equal(resolverFirepitSharedAsset.attributes.inFirePitPropsByType['resolver-order-plain-*'].transform.scale, 0.55);
+assert.equal(resolverFirepitSharedAsset.attributes.inFirePitPropsByType['resolver-order-plain-iron'], undefined);
+
 const suiteShapeExact = await resolveAssetSuiteVariant('synthetic_mod/assets/synthetic/itemtypes/bytype_shapes.json', 'bytype-shape-red');
 assert.equal(suiteShapeExact.resolved.shape.matchedPattern, 'bytype-shape-red');
 assert.equal(suiteShapeExact.resolved.shape.exact, true);
+assert.equal(suiteShapeExact.resolved.shape.sourcePath, 'root.shapeByType["bytype-shape-red"]');
 assert.equal(suiteShapeExact.resolved.shape.resolvedBase, 'item/variant/red');
 const suiteShapeWildcard = await resolveAssetSuiteVariant('synthetic_mod/assets/synthetic/itemtypes/bytype_shapes.json', 'bytype-shape-blue');
 assert.equal(suiteShapeWildcard.resolved.shape.matchedPattern, 'bytype-shape-b*');
@@ -497,33 +906,301 @@ assert.equal(suiteShapeFallback.resolved.shape.matchedPattern, '*');
 assert.equal(suiteShapeFallback.resolved.shape.fallback, true);
 assert.equal(suiteShapeFallback.resolved.shape.resolvedBase, 'item/variant/default');
 
+const shapeAlternateTemp = fs.mkdtempSync(PathModule.join(process.env.TEMP || process.cwd(), 'vintagebench-shape-alternates-'));
+try {
+	const alternateWorkspace = buildVintageStoryWorkspace({
+		modRoot: join(shapeAlternateTemp, 'AltMod'),
+		domain: 'altmod',
+		PathModule
+	});
+	fs.mkdirSync(join(alternateWorkspace.folders.itemtypes), {recursive: true});
+	fs.mkdirSync(join(alternateWorkspace.folders.shapes, 'item'), {recursive: true});
+	const alternateAssetPath = join(alternateWorkspace.folders.itemtypes, 'alternate-item.json');
+	fs.writeFileSync(alternateAssetPath, serializeGeneratedVintageStoryAsset({
+		code: 'alternate-item',
+		shape: {
+			base: 'item/main',
+			alternates: [
+				{base: 'item/charge1'},
+				{base: 'item/missingcharge'}
+			]
+		}
+	}));
+	fs.writeFileSync(join(alternateWorkspace.folders.shapes, 'item', 'main.json'), JSON.stringify({textureWidth: 16, textureHeight: 16, elements: []}, null, '\t'));
+	const chargeShapePath = join(alternateWorkspace.folders.shapes, 'item', 'charge1.json');
+	fs.writeFileSync(chargeShapePath, JSON.stringify({textureWidth: 16, textureHeight: 16, elements: []}, null, '\t'));
+	const alternateDocument = parseVintageStoryAssetDocument(fs.readFileSync(alternateAssetPath, 'utf8'), alternateAssetPath);
+	const alternateVariant = listVintageStoryAssetVariants(alternateDocument, 0).includedVariants[0];
+	const alternateResolved = resolveVintageStoryAssetVariant(alternateDocument, 0, alternateVariant, {
+		sourceFilePath: alternateAssetPath,
+		fs,
+		PathModule,
+		modAssetRoot: alternateWorkspace.modRoot
+	});
+	assert.equal(alternateResolved.shape.alternates.length, 2);
+	assert.equal(alternateResolved.shape.alternates[0].resolvedBase, 'item/charge1');
+	assert.equal(alternateResolved.shape.alternates[0].resolvedShapeFilePath, chargeShapePath);
+	assert.equal(alternateResolved.shape.alternates[1].missing, true);
+	assert.equal(alternateResolved.warnings.some(warning => warning.includes('Missing alternate shape')), true);
+	assert.equal(validateVintageStoryShapeAlternatives(alternateResolved.shape.alternates).some(warning => warning.includes('Missing alternate shape file')), true);
+	const alternateEditAsset = stableClone(alternateDocument.assetObjects[0].object);
+	const alternateList = cloneVintageStoryShapeAlternatives(alternateResolved.shape.alternates.slice(0, 1));
+	alternateList.push(makeShapeAlternativeFromBase('item/charge2', alternateResolved.shape, {
+		index: 1,
+		resolvedShapeFilePath: join(alternateWorkspace.folders.shapes, 'item', 'charge2.json')
+	}));
+	assert.equal(applyShapeAlternativesToAssetObject(alternateEditAsset, alternateResolved.shape, alternateList), true);
+	assert.equal(alternateEditAsset.shape.alternates[1].base, 'item/charge2');
+	const inheritedShapeAsset = {
+		code: 'alternate-bytype',
+		variantgroups: [{code: 'color', states: ['red', 'blue']}],
+		shapeByType: {
+			'*': {base: 'item/main', rotateY: 90, alternates: [{base: 'item/charge1'}]}
+		}
+	};
+	const inheritedSource = Object.assign({}, alternateResolved.shape, {
+		sourceMapPath: 'root.shapeByType',
+		sourcePath: 'root.shapeByType["*"]',
+		matchedPattern: '*',
+		selectedVariantKey: 'alternate-bytype-blue',
+		isByType: true,
+		exact: false,
+		inherited: true,
+		fallback: true,
+		rawRef: {base: 'item/main', rotateY: 90, alternates: [{base: 'item/charge1'}]},
+		resolvedBase: 'item/main'
+	});
+	const inheritedAlternate = makeShapeAlternativeFromBase('item/charge-blue', inheritedSource, {
+		index: 1,
+		resolvedShapeFilePath: join(alternateWorkspace.folders.shapes, 'item', 'charge-blue.json')
+	});
+	assert.equal(applyShapeAlternativesToAssetObject(inheritedShapeAsset, inheritedAlternate.sourcePointer, [inheritedAlternate]), true);
+	assert.equal(inheritedShapeAsset.shapeByType['alternate-bytype-blue'].base, 'item/main');
+	assert.equal(inheritedShapeAsset.shapeByType['alternate-bytype-blue'].rotateY, 90);
+	assert.equal(inheritedShapeAsset.shapeByType['alternate-bytype-blue'].alternates[0].base, 'item/charge-blue');
+	assert.equal(inheritedShapeAsset.shapeByType['*'].alternates[0].base, 'item/charge1');
+	const alternateExportPlan = createVintageStoryExportPlanFromResolvedContext({
+		workspace: alternateWorkspace,
+		modInfo: {modid: 'altmod', name: 'Alt Mod', authors: 'P1nkOblivion', version: '1.0.0'},
+		assetContext: {
+			source_file_path: alternateAssetPath,
+			source_kind: 'item',
+			source_object_index: 0,
+			current_shape_target: {
+				kind: 'alternate_shape',
+				shape_base: 'item/charge1',
+				shape_path: chargeShapePath
+			},
+			shape: alternateResolved.shape,
+			texture_sources: {aliases: {}}
+		},
+		shapeJson: {textureWidth: 16, textureHeight: 16, elements: []}
+	}, {fs, PathModule});
+	const alternateShapeEntry = alternateExportPlan.entries.find(entry => entry.kind === 'shape');
+	assert.equal(alternateShapeEntry.targetPath, chargeShapePath);
+} finally {
+	fs.rmSync(shapeAlternateTemp, {recursive: true, force: true});
+}
+
 const suiteTextureExact = await resolveAssetSuiteVariant('synthetic_mod/assets/synthetic/itemtypes/bytype_textures.json', 'bytype-texture-red');
 assert.equal(suiteTextureExact.resolved.textures.aliases.outside.matchedPattern, 'bytype-texture-red');
+assert.equal(suiteTextureExact.resolved.textures.aliases.outside.sourcePath, 'root.texturesByType["bytype-texture-red"].outside');
 assert.equal(suiteTextureExact.resolved.textures.aliases.outside.resolvedBase, 'item/bytype/red');
+assert.equal(suiteTextureExact.resolved.textures.aliases.outside.sourceKind, 'texturesByType');
 assert.equal(suiteTextureExact.resolved.textures.aliases.trim.sourceMapPath, 'root.textures');
+assert.equal(suiteTextureExact.resolved.textures.aliases.trim.sourcePath, 'root.textures.trim');
+assert.equal(suiteTextureExact.resolved.textures.aliases.trim.sourceKind, 'textures');
 const suiteTextureWildcard = await resolveAssetSuiteVariant('synthetic_mod/assets/synthetic/itemtypes/bytype_textures.json', 'bytype-texture-blue');
 assert.equal(suiteTextureWildcard.resolved.textures.aliases.outside.matchedPattern, 'bytype-texture-b*');
 assert.equal(suiteTextureWildcard.resolved.textures.aliases.inside.resolvedBase, 'item/bytype/blue-inside');
 const suiteTextureFallback = await resolveAssetSuiteVariant('synthetic_mod/assets/synthetic/itemtypes/bytype_textures.json', 'bytype-texture-green');
 assert.equal(suiteTextureFallback.resolved.textures.aliases.outside.matchedPattern, '*');
 assert.equal(suiteTextureFallback.resolved.textures.aliases.outside.resolvedBase, 'item/bytype/fallback');
+const suiteTextureEntries = collectVintageStoryTextureEntries({texture_sources: suiteTextureFallback.resolved.textures});
+assert.equal(suiteTextureEntries.some(entry => entry.alias === 'outside' && entry.sourceKind === 'texturesByType'), true);
+assert.equal(suiteTextureEntries.some(entry => entry.alias === 'trim' && entry.sourceKind === 'textures'), true);
+const textureOverrideAsset = stableClone(suiteTextureFallback.document.assetObjects[0].object);
+const textureOverrideEntry = updateTextureEntryBase(suiteTextureFallback.resolved.textures.aliases.outside, 'item/bytype/copied', join(assetSuiteRoot, 'synthetic_mod', 'assets', 'synthetic', 'textures', 'item', 'bytype', 'copied.png'), 'override');
+assert.equal(textureOverrideEntry.sourcePointer.editTargetKey, 'bytype-texture-green');
+assert.equal(applyTextureOverrideToAssetObject(textureOverrideAsset, textureOverrideEntry.sourcePointer, textureOverrideEntry.rawRef), true);
+assert.equal(textureOverrideAsset.texturesByType['bytype-texture-green'].outside.base, 'item/bytype/copied');
+assert.equal(textureOverrideAsset.texturesByType['*'].outside.base, 'item/bytype/fallback');
+const textureSharedAsset = stableClone(suiteTextureFallback.document.assetObjects[0].object);
+const textureSharedSource = makeTextureEditSource(suiteTextureFallback.resolved.textures.aliases.outside, 'shared');
+assert.equal(textureSharedSource.editTargetKey, '*');
+assert.equal(applyTextureOverrideToAssetObject(textureSharedAsset, textureSharedSource, {base: 'item/bytype/shared'}), true);
+assert.equal(textureSharedAsset.texturesByType['*'].outside.base, 'item/bytype/shared');
+const textureSharedEntry = updateTextureEntryBase(suiteTextureFallback.resolved.textures.aliases.outside, 'item/bytype/shared-entry', '', 'shared');
+assert.equal(textureSharedEntry.sourcePointer.editTargetKey, '*');
+assert.equal(textureSharedEntry.exact, false);
+const shapeAliasAsset = {};
+const shapeAliasEntry = updateTextureEntryBase({
+	alias: 'shapeonly',
+	sourceKind: 'shape.textures',
+	sourceMapPath: 'shape.textures',
+	selectedVariantKey: 'shape-alias'
+}, 'item/shapeonly/copied', join(assetSuiteRoot, 'synthetic_mod', 'assets', 'synthetic', 'textures', 'item', 'shapeonly', 'copied.png'), 'override');
+assert.equal(applyTextureOverrideToAssetObject(shapeAliasAsset, shapeAliasEntry.sourcePointer, shapeAliasEntry.rawRef), true);
+assert.equal(shapeAliasAsset.textures.shapeonly, 'item/shapeonly/copied');
+const missingAliasWarnings = [];
+const missingAliasTextures = resolveVintageStoryTextureAliases(
+	{code: 'missing-alias'},
+	{
+		textures: {},
+		elements: [{faces: {north: {texture: '#missingalias'}}}]
+	},
+	{variantCode: 'missing-alias', codePath: 'missing-alias', states: {}, codeDomain: 'synthetic'},
+	[join(assetSuiteRoot, 'synthetic_mod')],
+	join(assetSuiteRoot, 'synthetic_mod', 'assets', 'synthetic', 'itemtypes', 'missing_alias.json'),
+	join(assetSuiteRoot, 'synthetic_mod', 'assets', 'synthetic', 'shapes', 'item', 'missing_alias.json'),
+	{fs, PathModule},
+	missingAliasWarnings
+);
+assert.equal(missingAliasTextures.aliases.missingalias.sourceKind, 'missing');
+assert.equal(missingAliasTextures.aliases.missingalias.missing, true);
+assert.equal(missingAliasWarnings.some(message => message.includes('Missing texture alias')), true);
+assert.equal(validateVintageStoryTextureEntries(collectVintageStoryTextureEntries(missingAliasTextures)).some(message => message.includes('Missing texture alias "missingalias"')), true);
+
+const textureManagerTemp = fs.mkdtempSync(PathModule.join(process.env.TEMP || process.cwd(), 'vintagebench-textures-'));
+try {
+	const textureWorkspace = buildVintageStoryWorkspace({
+		modRoot: join(textureManagerTemp, 'TextureMod'),
+		domain: 'texturemod',
+		PathModule
+	});
+	const sourceTexturePath = join(textureManagerTemp, 'source.png');
+	fs.writeFileSync(sourceTexturePath, Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+	const textureAssetPath = join(textureWorkspace.folders.itemtypes, 'texture-test.json');
+	const copyResult = copyTextureIntoWorkspace(
+		{alias: 'outside'},
+		sourceTexturePath,
+		textureWorkspace,
+		{fs, PathModule},
+		{assetFilePath: textureAssetPath, assetContext: {asset_code: 'texture-test'}}
+	);
+	assert.equal(copyResult.copied, true);
+	assert.equal(copyResult.duplicate, false);
+	assert.equal(fs.existsSync(copyResult.targetPath), true);
+	assert.equal(copyResult.assetBase, 'item/texture-test/outside');
+	assert.equal(textureAssetBaseFromFilePath(copyResult.targetPath, textureAssetPath, textureWorkspace), copyResult.assetBase);
+	const duplicateResult = copyTextureIntoWorkspace(
+		{alias: 'outside'},
+		sourceTexturePath,
+		textureWorkspace,
+		{fs, PathModule},
+		{assetFilePath: textureAssetPath, assetContext: {asset_code: 'texture-test'}}
+	);
+	assert.equal(duplicateResult.copied, false);
+	assert.equal(duplicateResult.duplicate, true);
+	assert.equal(duplicateResult.assetBase, copyResult.assetBase);
+} finally {
+	fs.rmSync(textureManagerTemp, {recursive: true, force: true});
+}
+
+const assetExplorerTemp = fs.mkdtempSync(PathModule.join(process.env.TEMP || process.cwd(), 'vintagebench-explorer-'));
+try {
+	const explorerWorkspace = buildVintageStoryWorkspace({
+		modRoot: join(assetExplorerTemp, 'ExplorerMod'),
+		domain: 'explorer',
+		PathModule
+	});
+	[
+		explorerWorkspace.folders.itemtypes,
+		explorerWorkspace.folders.blocktypes,
+		join(explorerWorkspace.folders.shapes, 'item'),
+		join(explorerWorkspace.folders.textures, 'item'),
+		explorerWorkspace.folders.lang
+	].forEach(path => fs.mkdirSync(path, {recursive: true}));
+	fs.writeFileSync(join(explorerWorkspace.modRoot, 'modinfo.json'), JSON.stringify(buildVintageStoryModInfo({
+		modid: 'explorer',
+		name: 'Explorer Test',
+		authors: 'P1nkOblivion',
+		version: '1.0.0'
+	}), null, '\t'));
+	const explorerAssetPath = join(explorerWorkspace.folders.itemtypes, 'explorer-item.json');
+	fs.writeFileSync(explorerAssetPath, serializeGeneratedVintageStoryAsset({
+		code: 'explorer-item',
+		shape: {base: 'item/used', alternates: [{base: 'item/alternate-used'}]},
+		textures: {
+			outside: {base: 'item/usedtex'},
+			missing: {base: 'item/missingtex'}
+		},
+		attributes: {
+			attachableToEntity: {
+				categoryCode: 'toolholding',
+				attachedShapeBySlotCode: {
+					goodslot: {base: 'item/attached'},
+					badslot: {base: 'item/missingattached'}
+				}
+			}
+		}
+	}));
+	const explorerShape = {
+		textureWidth: 16,
+		textureHeight: 16,
+		elements: [{
+			name: 'Root',
+			from: [0, 0, 0],
+			to: [16, 16, 16],
+			faces: {
+				north: {texture: '#outside', uv: [0, 0, 16, 16]},
+				south: {texture: '#missing', uv: [0, 0, 16, 16]}
+			}
+		}]
+	};
+	const usedShapePath = join(explorerWorkspace.folders.shapes, 'item', 'used.json');
+	fs.writeFileSync(usedShapePath, JSON.stringify(explorerShape, null, '\t'));
+	fs.writeFileSync(join(explorerWorkspace.folders.shapes, 'item', 'alternate-used.json'), JSON.stringify({textureWidth: 16, textureHeight: 16, elements: []}, null, '\t'));
+	fs.writeFileSync(join(explorerWorkspace.folders.shapes, 'item', 'attached.json'), JSON.stringify({textureWidth: 16, textureHeight: 16, elements: []}, null, '\t'));
+	fs.writeFileSync(join(explorerWorkspace.folders.shapes, 'item', 'unused.json'), JSON.stringify({textureWidth: 16, textureHeight: 16, elements: []}, null, '\t'));
+	fs.writeFileSync(join(explorerWorkspace.folders.textures, 'item', 'usedtex.png'), Buffer.from([137, 80, 78, 71]));
+	fs.writeFileSync(join(explorerWorkspace.folders.textures, 'item', 'unusedtex.png'), Buffer.from([137, 80, 78, 71, 1]));
+	fs.writeFileSync(join(explorerWorkspace.folders.lang, 'en.json'), JSON.stringify({'item-explorer-item': 'Explorer Item'}, null, '\t'));
+	const explorer = buildVintageStoryAssetExplorer(explorerWorkspace, {fs, PathModule}, {currentShapePath: usedShapePath});
+	assert.equal(explorer.errors.length, 0);
+	assert.equal(explorer.treeRows.some(row => row.kind === 'modinfo' && row.label === 'modinfo.json'), true);
+	assert.equal(explorer.treeRows.some(row => row.kind === 'itemtype' && row.path === explorerAssetPath), true);
+	assert.equal(explorer.findings.assetsReferencingCurrentShape.length, 1);
+	assert.equal(explorer.findings.assetsReferencingCurrentShape[0].assetFilePath, explorerAssetPath);
+	assert.equal(explorer.findings.missingTextures.some(finding => finding.alias === 'missing' && finding.base === 'item/missingtex'), true);
+	assert.equal(explorer.findings.unusedShapes.some(finding => finding.base === 'item/unused'), true);
+	assert.equal(explorer.findings.unusedShapes.some(finding => finding.base === 'item/used'), false);
+	assert.equal(explorer.findings.unusedShapes.some(finding => finding.base === 'item/alternate-used'), false);
+	assert.equal(explorer.findings.unusedShapes.some(finding => finding.base === 'item/attached'), false);
+	assert.equal(explorer.findings.unusedTextures.some(finding => finding.base === 'item/unusedtex'), true);
+	assert.equal(explorer.findings.unusedTextures.some(finding => finding.base === 'item/usedtex'), false);
+	assert.equal(explorer.findings.brokenAttachedShapeRefs.some(finding => finding.slotCode === 'badslot' && finding.base === 'item/missingattached'), true);
+	const explorerGroups = getVintageStoryAssetExplorerFindingGroups(explorer);
+	assert.equal(explorerGroups.find(group => group.id === 'missingTextures').entries.length, explorer.findings.missingTextures.length);
+} finally {
+	fs.rmSync(assetExplorerTemp, {recursive: true, force: true});
+}
 
 const suiteTransformExact = await resolveAssetSuiteVariant('synthetic_mod/assets/synthetic/itemtypes/bytype_transforms.json', 'bytype-transform-red');
 assert.equal(suiteTransformExact.resolved.transforms.guiTransform.exact, true);
 assert.equal(suiteTransformExact.resolved.transforms.guiTransform.value.translation.x, 1);
 const suiteTransformWildcard = await resolveAssetSuiteVariant('synthetic_mod/assets/synthetic/itemtypes/bytype_transforms.json', 'bytype-transform-blue');
 assert.equal(suiteTransformWildcard.resolved.transforms.guiTransform.matchedPattern, 'bytype-transform-b*');
+assert.equal(suiteTransformWildcard.resolved.transforms.guiTransform.sourcePath, 'root.guiTransformByType["bytype-transform-b*"]');
 assert.equal(suiteTransformWildcard.resolved.transforms.guiTransform.value.translation.y, 2);
 const suiteTransformFallback = await resolveAssetSuiteVariant('synthetic_mod/assets/synthetic/itemtypes/bytype_transforms.json', 'bytype-transform-green');
 assert.equal(suiteTransformFallback.resolved.transforms.guiTransform.fallback, true);
 assert.equal(suiteTransformFallback.resolved.transforms.guiTransform.value.translation.z, 3);
+assert.equal(suiteTransformFallback.resolved.transforms.fpHandTransform.sourcePath, 'root.fpHandTransformByType["*"]');
+assert.equal(suiteTransformFallback.resolved.transforms.fpHandTransform.value.translation.x, 1);
+assert.equal(suiteTransformFallback.resolved.transforms.toolrackTransform.sourcePath, 'root.toolrackTransformByType["*"]');
+assert.equal(suiteTransformFallback.resolved.transforms.toolrackTransform.value.scale, 0.55);
 
 const suiteAttributesTransform = await resolveAssetSuiteVariant('synthetic_mod/assets/synthetic/itemtypes/attributes_transforms.json', 'attributes-transform-red');
 assert.equal(suiteAttributesTransform.resolved.transforms.toolrackTransform.sourceMapPath, 'root.attributes.toolrackTransformByType');
 assert.equal(suiteAttributesTransform.resolved.transforms.toolrackTransform.exact, true);
+assert.equal(suiteAttributesTransform.resolved.transforms.inFirePitPropsTransform.sourcePath, 'root.attributes.inFirePitPropsByType["*"].transform');
+assert.equal(suiteAttributesTransform.resolved.transforms.inFirePitPropsTransform.value.scale, 0.6);
 const suiteAttributesTransformWildcard = await resolveAssetSuiteVariant('synthetic_mod/assets/synthetic/itemtypes/attributes_transforms.json', 'attributes-transform-blue');
 assert.equal(suiteAttributesTransformWildcard.resolved.transforms.onAntlerMountTransform.matchedPattern, 'attributes-transform-b*');
 assert.equal(suiteAttributesTransformWildcard.resolved.transforms.groundStorageTransform.matchedPattern, '*');
+assert.equal(suiteAttributesTransformWildcard.resolved.transforms.inFirePitPropsTransform.sourcePath, 'root.attributes.inFirePitPropsByType["attributes-transform-b*"].transform');
+assert.equal(suiteAttributesTransformWildcard.resolved.transforms.inFirePitPropsTransform.value.translation.x, 4);
 
 const suiteGroundBoxes = await resolveAssetSuiteVariant('synthetic_mod/assets/synthetic/itemtypes/groundstorable_boxes.json', 'ground-boxes');
 assert.equal(suiteGroundBoxes.resolved.interactionBoxes.some(box => box.family === 'behavior.selectionBox' && box.behaviorName === 'GroundStorable'), true);
@@ -778,17 +1455,43 @@ const interactionAssetText = `{
 	],
 	skipVariants: ["box-test-hidden"],
 	shape: { base: "block/test/box" },
+	rotateY: 15,
+	rotateYByType: {
+		"box-test-red": 90,
+		"*": 45,
+	},
 	collisionbox: { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.5, z2: 1 },
+	collisionboxes: [
+		{ x1: 0.2, y1: 0, z1: 0.2, x2: 0.8, y2: 0.3, z2: 0.8 },
+	],
+	collisionboxesByType: {
+		"box-test-blue": [
+			{ x1: 0.3, y1: 0, z1: 0.3, x2: 0.7, y2: 0.2, z2: 0.7 },
+			{ x1: 0.35, y1: 0.2, z1: 0.35, x2: 0.65, y2: 0.35, z2: 0.65 },
+		],
+	},
+	selectionbox: { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.6, z2: 1 },
+	selectionboxByType: {
+		"box-test-blue": { x1: 0.05, y1: 0, z1: 0.05, x2: 0.95, y2: 0.55, z2: 0.95 },
+	},
 	selectionboxes: [
 		{ x1: 0.1, y1: 0, z1: 0.1, x2: 0.9, y2: 0.4, z2: 0.9 },
 		{ x1: 0.25, y1: 0.4, z1: 0.25, x2: 0.75, y2: 0.8, z2: 0.75, rotateY: 90 },
 	],
+	selectionboxesByType: {
+		"box-test-blue": [
+			{ x1: 0.15, y1: 0, z1: 0.15, x2: 0.85, y2: 0.45, z2: 0.85 },
+		],
+	},
 	collisionboxByType: {
 		"box-test-blue": { x1: 0, y1: 0, z1: 0, x2: 0.5, y2: 0.25, z2: 0.5 },
 		"*": { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.25, z2: 1 },
 	},
+	collisionSelectionBoxes: [
+		{ x1: 0.05, y1: 0, z1: 0.05, x2: 0.95, y2: 0.15, z2: 0.95 },
+	],
 	collisionSelectionBoxesByType: {
-		"*": [
+		"box-test-blue": [
 			{ x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.2, z2: 1 }
 		]
 	},
@@ -814,10 +1517,36 @@ const blueBoxVariant = resolveVintageStoryAssetVariant(interactionDocument, 0, i
 assert.equal(redBoxVariant.interactionBoxes.find(box => box.family === 'collisionbox').matchedPattern, '*');
 assert.equal(redBoxVariant.interactionBoxes.find(box => box.family === 'collisionbox').inherited, true);
 assert.equal(blueBoxVariant.interactionBoxes.find(box => box.family === 'collisionbox').exact, true);
+assert.equal(redBoxVariant.interactionBoxes.find(box => box.family === 'collisionbox').assetRotateY.value, 90);
+assert.equal(redBoxVariant.interactionBoxes.find(box => box.family === 'collisionbox').assetRotateY.sourcePath, 'root.rotateYByType["box-test-red"]');
+assert.equal(redBoxVariant.runtimeAssetObject.rotateY, 90);
+assert.equal(blueBoxVariant.runtimeAssetObject.rotateY, 45);
+assert.equal(redBoxVariant.interactionBoxes.filter(box => box.family === 'collisionboxes').length, 1);
+assert.equal(redBoxVariant.interactionBoxes.find(box => box.family === 'collisionboxes').sourcePath, 'root.collisionboxes[0]');
+assert.equal(blueBoxVariant.interactionBoxes.filter(box => box.family === 'collisionboxes').length, 2);
+assert.equal(blueBoxVariant.interactionBoxes.find(box => box.family === 'collisionboxes').sourcePath, 'root.collisionboxesByType["box-test-blue"][0]');
+assert.equal(redBoxVariant.interactionBoxes.find(box => box.family === 'selectionbox').sourcePath, 'root.selectionbox');
+assert.equal(blueBoxVariant.interactionBoxes.find(box => box.family === 'selectionbox').sourcePath, 'root.selectionboxByType["box-test-blue"]');
 assert.equal(redBoxVariant.interactionBoxes.filter(box => box.family === 'selectionboxes').length, 2);
-assert.equal(redBoxVariant.interactionBoxes.find(box => box.family === 'collisionSelectionBoxes').matchedPattern, '*');
+assert.equal(blueBoxVariant.interactionBoxes.filter(box => box.family === 'selectionboxes').length, 1);
+assert.equal(blueBoxVariant.interactionBoxes.find(box => box.family === 'selectionboxes').sourcePath, 'root.selectionboxesByType["box-test-blue"][0]');
+assert.equal(redBoxVariant.interactionBoxes.find(box => box.family === 'collisionSelectionBoxes').sourcePath, 'root.collisionSelectionBoxes[0]');
+assert.equal(blueBoxVariant.interactionBoxes.find(box => box.family === 'collisionSelectionBoxes').matchedPattern, 'box-test-blue');
 assert.equal(redBoxVariant.interactionBoxes.find(box => box.family === 'behavior.selectionBox').behaviorName, 'GroundStorable');
 assert.equal(redBoxVariant.interactionBoxes.find(box => box.family === 'behavior.collisionBox').isByType, true);
+
+const nullCollisionDocument = parseVintageStoryAssetDocument(`{
+	code: "null-collision",
+	shape: { base: "block/test/box" },
+	collisionbox: null,
+	selectionbox: { x1: 0, y1: 0, z1: 0, x2: 1, y2: 1, z2: 1 }
+}`, join(assetFixtureRoot, 'null_collision_box.json'));
+const nullCollisionVariant = listVintageStoryAssetVariants(nullCollisionDocument, 0).includedVariants[0];
+const nullCollisionResolved = resolveVintageStoryAssetVariant(nullCollisionDocument, 0, nullCollisionVariant, {
+	sourceFilePath: join(assetFixtureRoot, 'null_collision_box.json')
+});
+assert.equal(nullCollisionResolved.interactionBoxes.find(box => box.family === 'collisionbox').value, null);
+assert.ok(validateVintageStoryInteractionBoxes(nullCollisionResolved.interactionBoxes).some(warning => warning.includes('Collision is disabled')));
 
 const missingGroundStorableBoxDocument = parseVintageStoryAssetDocument(`{
 	code: "missing-ground-boxes",
@@ -883,6 +1612,7 @@ const invalidBoxWarnings = validateVintageStoryInteractionBoxes([{
 assert.ok(invalidBoxWarnings.some(warning => warning.includes('x1 greater than x2')));
 assert.ok(invalidBoxWarnings.some(warning => warning.includes('zero Y size')));
 assert.ok(invalidBoxWarnings.some(warning => warning.includes('matches no generated variants')));
+assert.ok(validateVintageStoryInteractionBoxes(blueBoxVariant.interactionBoxes, {variants: interactionVariants.allVariants}).some(warning => warning.includes('root.rotateYByType["*"] affects')));
 assert.deepEqual(interactionBoxFromModelBounds({min: [0, 0, 0], max: [16, 8, 16]}), {x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.5, z2: 1});
 
 const saveAsAssetConfig = JSON.parse(await readFile(join(assetFixtureRoot, 'save_as_asset_flowerpot_config.json'), 'utf8'));
@@ -1157,15 +1887,35 @@ const presetIds = getVintageStoryAssetPresets().map(preset => preset.id);
 assert.deepEqual(presetIds, [
 	'decorative_block',
 	'decorative_item',
-	'shelfable_display_item',
+	'shelfable_item',
+	'display_case_item',
 	'tool_rack_item',
 	'ground_storable_item',
 	'antler_mount_item',
-	'attachable_entity_item',
+	'firepit_item',
 	'simple_tool',
 	'simple_weapon',
-	'firepit_forge_item'
+	'attachable_entity_item'
 ]);
+
+const presetOptionsById = new Map(getSaveAsAssetPresetOptions().map(option => [option.id, option]));
+[
+	'decorative_block',
+	'decorative_item',
+	'shelfable_item',
+	'display_case_item',
+	'tool_rack_item',
+	'ground_storable_item',
+	'antler_mount_item',
+	'firepit_item',
+	'simple_tool',
+	'simple_weapon',
+	'attachable_entity_item'
+].forEach(id => {
+	assert.equal(presetOptionsById.get(id).verified, true);
+	assert.equal(presetOptionsById.get(id).experimental, false);
+});
+assert.equal(presetOptionsById.get('tool_rack_item').label, 'Rackable / Tool Rack Item');
 
 const decorativeBlockPatch = buildVintageStoryPresetFormPatch('decorative_block');
 assert.equal(decorativeBlockPatch.asset_preset, 'decorative_block');
@@ -1202,6 +1952,51 @@ const presetDisplaySlot = {
 		extra: {}
 	}
 };
+const presetDecorativeItem = buildVintageStoryAssetObject({
+	code: 'preset-decoritem',
+	shapeSavePath: generatedShapePath,
+	assetSavePath: generatedAssetPath,
+	assetPreset: 'decorative_item',
+	includeDisplayTransforms: true,
+	displaySettings: {
+		guiTransform: presetDisplaySlot,
+		groundTransform: presetDisplaySlot,
+		tpHandTransform: presetDisplaySlot
+	}
+});
+assert.equal(presetDecorativeItem.errors.length, 0);
+assert.equal(presetDecorativeItem.asset.guiTransform.scale, 1.5);
+assert.equal(presetDecorativeItem.asset.groundTransform.scale, 1.5);
+assert.equal(presetDecorativeItem.asset.tpHandTransform.scale, 1.5);
+
+const presetShelfable = buildVintageStoryAssetObject({
+	code: 'preset-shelf',
+	shapeSavePath: generatedShapePath,
+	assetSavePath: generatedAssetPath,
+	assetPreset: 'shelfable_item',
+	includeDisplayTransforms: true,
+	displaySettings: {onshelfTransform: presetDisplaySlot}
+});
+assert.equal(presetShelfable.errors.length, 0);
+assert.equal(presetShelfable.asset.attributes.shelvable, true);
+assert.equal(presetShelfable.asset.attributes.displaycaseable, undefined);
+assert.equal(presetShelfable.asset.attributes.onshelfTransform.scale, 1.5);
+assert.equal(presetShelfable.asset.attributes.onDisplayTransform, undefined);
+
+const presetDisplayCase = buildVintageStoryAssetObject({
+	code: 'preset-displaycase',
+	shapeSavePath: generatedShapePath,
+	assetSavePath: generatedAssetPath,
+	assetPreset: 'display_case_item',
+	includeDisplayTransforms: true,
+	displaySettings: {onDisplayTransform: presetDisplaySlot}
+});
+assert.equal(presetDisplayCase.errors.length, 0);
+assert.equal(presetDisplayCase.asset.attributes.displaycaseable, true);
+assert.equal(presetDisplayCase.asset.attributes.shelvable, undefined);
+assert.equal(presetDisplayCase.asset.attributes.onDisplayTransform.scale, 1.5);
+assert.equal(presetDisplayCase.asset.attributes.onshelfTransform, undefined);
+
 const presetToolRack = buildVintageStoryAssetObject({
 	code: 'preset-rack',
 	shapeSavePath: generatedShapePath,
@@ -1213,6 +2008,32 @@ const presetToolRack = buildVintageStoryAssetObject({
 assert.equal(presetToolRack.errors.length, 0);
 assert.equal(presetToolRack.asset.attributes.rackable, true);
 assert.equal(presetToolRack.asset.attributes.toolrackTransform.scale, 1.5);
+
+const presetAntlerMount = buildVintageStoryAssetObject({
+	code: 'preset-antler',
+	shapeSavePath: generatedShapePath,
+	assetSavePath: generatedAssetPath,
+	assetPreset: 'antler_mount_item',
+	includeDisplayTransforms: true,
+	displaySettings: {onAntlerMountTransform: presetDisplaySlot}
+});
+assert.equal(presetAntlerMount.errors.length, 0);
+assert.equal(presetAntlerMount.asset.attributes.antlerMountable, true);
+assert.equal(presetAntlerMount.asset.attributes.onAntlerMountTransform.scale, 1.5);
+
+const presetFirepit = buildVintageStoryAssetObject({
+	code: 'preset-firepit',
+	shapeSavePath: generatedShapePath,
+	assetSavePath: generatedAssetPath,
+	assetPreset: 'firepit_item',
+	includeDisplayTransforms: true,
+	displaySettings: {inFirePitPropsTransform: presetDisplaySlot}
+});
+assert.equal(presetFirepit.errors.length, 0);
+assert.equal(presetFirepit.asset.attributes.inFirePitProps.transform.scale, 1.5);
+assert.deepEqual(Object.keys(presetFirepit.asset.attributes.inFirePitProps), ['transform']);
+assert.equal(presetFirepit.asset.attributes.infirepitTransform, undefined);
+assert.equal(presetFirepit.asset.attributes.inForgeTransform, undefined);
 
 const attachableFormPatch = buildVintageStoryPresetFormPatch('attachable_entity_item', {}, {
 	attachmentCategoryCode: 'weaponfalx',
@@ -1274,6 +2095,14 @@ assert.equal(existingPresetAsset.attributes.toolrackTransformByType['existing-re
 assert.equal(existingPresetAsset.unknownKeep.nested, true);
 applyVintageStoryPresetPatchToAsset(existingPresetAsset, rackPatch.patch, {overwrite: true});
 assert.equal(existingPresetAsset.attributes.rackable, true);
+
+const firepitPatch = buildVintageStoryPresetAssetPatch('firepit_item', {
+	selectedVariantKey: 'existing-red',
+	displaySettings: {inFirePitPropsTransform: presetDisplaySlot}
+});
+assert.equal(firepitPatch.patch.attributes.inFirePitPropsByType['existing-red'].transform.scale, 1.5);
+assert.equal(firepitPatch.patch.attributes.infirepitTransformByType, undefined);
+assert.equal(firepitPatch.patch.attributes.inForgeTransformByType, undefined);
 
 const existingBehaviorAsset = {
 	code: 'existingbehavior',
@@ -1453,6 +2282,7 @@ const saveAsAssetTransformIds = getSaveAsAssetTransformOptions().map(option => o
 assert.deepEqual(saveAsAssetTransformIds, [
 	'tpHandTransform',
 	'tpOffHandTransform',
+	'fpHandTransform',
 	'onTongTransform',
 	'groundTransform',
 	'groundStorageTransform',
@@ -1466,7 +2296,8 @@ assert.deepEqual(saveAsAssetTransformIds, [
 	'inTrapTransform',
 	'inForgeTransform',
 	'onOmokTransform',
-	'infirepitTransform'
+	'infirepitTransform',
+	'inFirePitPropsTransform'
 ]);
 const generatedTransforms = buildVintageStoryAssetObject({
 	code: 'transformtest',
@@ -1503,6 +2334,7 @@ const generatedAllTransforms = buildVintageStoryAssetObject({
 assert.equal(generatedAllTransforms.errors.length, 0);
 assert.equal(generatedAllTransforms.asset.tpHandTransform.scale, 1.5);
 assert.equal(generatedAllTransforms.asset.tpOffHandTransform.scale, 1.5);
+assert.equal(generatedAllTransforms.asset.fpHandTransform.scale, 1.5);
 assert.equal(generatedAllTransforms.asset.groundTransform.scale, 1.5);
 assert.equal(generatedAllTransforms.asset.guiTransform.scale, 1.5);
 assert.equal(generatedAllTransforms.asset.attributes.toolrackTransform.scale, 1.5);
@@ -1517,6 +2349,7 @@ assert.equal(generatedAllTransforms.asset.attributes.inTrapTransform.scale, 1.5)
 assert.equal(generatedAllTransforms.asset.attributes.inForgeTransform.scale, 1.5);
 assert.equal(generatedAllTransforms.asset.attributes.onOmokTransform.scale, 1.5);
 assert.equal(generatedAllTransforms.asset.attributes.infirepitTransform.scale, 1.5);
+assert.equal(generatedAllTransforms.asset.attributes.inFirePitProps.transform.scale, 1.5);
 
 const generatedSelectedTransforms = buildVintageStoryAssetObject({
 	code: 'selected-transformtest',
@@ -1561,6 +2394,24 @@ const invalidAbsoluteTexture = buildVintageStoryAssetObject({
 });
 assert.equal(invalidAbsoluteTexture.errors.some(error => error.includes('absolute filesystem path')), true);
 
+const invalidBackslashTexture = buildVintageStoryAssetObject({
+	code: 'badbackslash',
+	shapeSavePath: generatedShapePath,
+	assetSavePath: generatedAssetPath,
+	textureMode: SAVE_AS_ASSET_TEXTURE_MODES.MODEL_DEFAULTS,
+	textureDefaults: {texture: 'block\\clay\\redclay'}
+});
+assert.equal(invalidBackslashTexture.errors.some(error => error.includes('Windows backslashes')), true);
+
+const invalidTraversalTexture = buildVintageStoryAssetObject({
+	code: 'badtraversaltexture',
+	shapeSavePath: generatedShapePath,
+	assetSavePath: generatedAssetPath,
+	textureMode: SAVE_AS_ASSET_TEXTURE_MODES.MODEL_DEFAULTS,
+	textureDefaults: {texture: '../outside'}
+});
+assert.equal(invalidTraversalTexture.errors.some(error => error.includes('path traversal')), true);
+
 const outsideShapePath = buildVintageStoryAssetObject({
 	code: 'badshape',
 	shapeSavePath: join(assetFixtureRoot, 'badshape.json'),
@@ -1568,6 +2419,113 @@ const outsideShapePath = buildVintageStoryAssetObject({
 });
 assert.equal(outsideShapePath.errors.some(error => error.includes('Shape base path')), true);
 assert.equal(outsideShapePath.warnings.some(warning => warning.includes('outside an assets')), true);
+
+const outsideAssetPath = buildVintageStoryAssetObject({
+	code: 'badassetpath',
+	shapeSavePath: generatedShapePath,
+	assetSavePath: join(assetFixtureRoot, 'mod', 'assets', 'test', 'shapes', 'block', 'badassetpath.json')
+});
+assert.equal(outsideAssetPath.errors.some(error => error.includes('Block Asset Save Path')), true);
+
+const itemAssetPathCheck = buildVintageStoryAssetObject({
+	code: 'safeitem',
+	assetType: 'item',
+	shapeSavePath: join(assetFixtureRoot, 'mod', 'assets', 'test', 'shapes', 'item', 'safeitem.json'),
+	assetSavePath: join(assetFixtureRoot, 'mod', 'assets', 'test', 'itemtypes', 'safeitem.json')
+});
+assert.equal(itemAssetPathCheck.errors.some(error => error.includes('Item Asset Save Path')), false);
+
+const blockAssetPathCheck = buildVintageStoryAssetObject({
+	code: 'safeblock',
+	assetType: 'block',
+	shapeSavePath: join(assetFixtureRoot, 'mod', 'assets', 'test', 'shapes', 'block', 'safeblock.json'),
+	assetSavePath: join(assetFixtureRoot, 'mod', 'assets', 'test', 'blocktypes', 'safeblock.json')
+});
+assert.equal(blockAssetPathCheck.errors.some(error => error.includes('Block Asset Save Path')), false);
+
+const outsideLangPath = buildVintageStoryAssetObject({
+	code: 'badlang',
+	shapeSavePath: generatedShapePath,
+	assetSavePath: generatedAssetPath,
+	generateLang: true,
+	langPath: join(assetFixtureRoot, 'mod', 'assets', 'test', 'textures', 'en.json')
+});
+assert.equal(outsideLangPath.errors.some(error => error.includes('Lang File')), true);
+
+const validLangPath = buildVintageStoryAssetObject({
+	code: 'goodlang',
+	shapeSavePath: generatedShapePath,
+	assetSavePath: generatedAssetPath,
+	generateLang: true,
+	langPath: generatedLangPath
+});
+assert.equal(validLangPath.errors.some(error => error.includes('Lang File')), false);
+
+const invalidShapeBaseTraversal = buildVintageStoryAssetObject({
+	code: 'badshapebase',
+	shapeBase: '../../escape',
+	shapeSavePath: generatedShapePath,
+	assetSavePath: generatedAssetPath
+});
+assert.equal(invalidShapeBaseTraversal.errors.some(error => error.includes('path traversal')), true);
+assert.equal(JSON.stringify(invalidShapeBaseTraversal.asset).includes('..'), false);
+
+const invalidShapeBaseFilesystemPrefix = buildVintageStoryAssetObject({
+	code: 'badshapeprefix',
+	shapeBase: 'assets/test/shapes/block/badshapeprefix',
+	shapeSavePath: generatedShapePath,
+	assetSavePath: generatedAssetPath
+});
+assert.equal(invalidShapeBaseFilesystemPrefix.errors.some(error => error.includes('asset base path')), true);
+
+const invalidShapeAlternateTraversal = parseShapeAlternatesText('../bad-shape');
+assert.equal(invalidShapeAlternateTraversal.errors.some(error => error.includes('path traversal')), true);
+
+const invalidAttachmentSlotTraversal = parseAttachmentSlotsText('frontrightside | ../bad-shape');
+assert.equal(invalidAttachmentSlotTraversal.errors.some(error => error.includes('path traversal')), true);
+
+const invalidAttachmentSlotBackslash = parseAttachmentSlotsText('frontrightside | item\\wearable\\bad');
+assert.equal(invalidAttachmentSlotBackslash.errors.some(error => error.includes('Windows backslashes')), true);
+
+const advancedUnsafePathAsset = buildVintageStoryAssetObject({
+	code: 'advancedunsafe',
+	shapeSavePath: generatedShapePath,
+	assetSavePath: generatedAssetPath,
+	rootExtras: {serverOnlyPath: 'C:\\Users\\bad\\asset.json'},
+	attributesExtras: {shapeBase: '../escape'}
+});
+assert.equal(advancedUnsafePathAsset.errors.some(error => error.includes('absolute filesystem path')), true);
+assert.equal(advancedUnsafePathAsset.errors.some(error => error.includes('path traversal')), true);
+
+const safeShapeResolution = resolveAssetBasePath(
+	[join(assetSuiteRoot, 'synthetic_mod')],
+	'synthetic',
+	'shapes',
+	'item/variant/default',
+	['.json'],
+	{fs, PathModule}
+);
+assert.equal(safeShapeResolution.resolvedFilePath.endsWith(PathModule.join('assets', 'synthetic', 'shapes', 'item', 'variant', 'default.json')), true);
+assert.equal(safeShapeResolution.invalid, undefined);
+const traversalShapeResolution = resolveAssetBasePath(
+	[join(assetSuiteRoot, 'synthetic_mod')],
+	'synthetic',
+	'shapes',
+	'../../outside',
+	['.json'],
+	{fs, PathModule}
+);
+assert.equal(traversalShapeResolution.invalid, true);
+assert.equal(traversalShapeResolution.resolvedFilePath, '');
+const safeTextureResolution = resolveAssetBasePath(
+	[join(assetSuiteRoot, 'synthetic_mod')],
+	'synthetic',
+	'textures',
+	'item/bytype/fallback',
+	['.png'],
+	{fs, PathModule}
+);
+assert.equal(safeTextureResolution.resolvedFilePath.endsWith(PathModule.join('assets', 'synthetic', 'textures', 'item', 'bytype', 'fallback.png')), true);
 
 const generatedPreview = generateVintageStoryAssetPreview(Object.assign({}, saveAsAssetConfig, {
 	shapeSavePath: generatedShapePath,
@@ -1608,6 +2566,92 @@ try {
 		domain: 'test',
 		PathModule
 	});
+	const dirtyProject = {
+		saved: false,
+		save_path: join(exportWorkspace.folders.shapes, 'item', 'dirtymain.json'),
+		export_path: join(exportWorkspace.folders.shapes, 'item', 'dirtymain.json'),
+		vintage_story_data: {
+			editing_target: {kind: 'main', shape_path: join(exportWorkspace.folders.shapes, 'item', 'dirtymain.json')},
+			asset_context: {source_file_path: join(exportWorkspace.folders.itemtypes, 'dirtyasset.json')}
+		},
+		display_settings: {
+			gui: {vintage_story: {asset_source: {dirty: true}}}
+		}
+	};
+	assert.equal(collectVintageStoryDirtyRecords(dirtyProject).some(record => record.kind === VINTAGE_STORY_DIRTY_KINDS.MAIN_SHAPE), true);
+	assert.equal(collectVintageStoryDirtyRecords(dirtyProject).some(record => record.kind === VINTAGE_STORY_DIRTY_KINDS.ASSET), true);
+	dirtyProject.saved = true;
+	markVintageStoryExportPlanDirty(dirtyProject, {
+		workspace: exportWorkspace,
+		entries: [
+			{kind: 'modinfo', targetPath: join(exportWorkspace.modRoot, 'modinfo.json')},
+			{kind: 'lang', targetPath: join(exportWorkspace.folders.lang, 'en.json')},
+			{kind: 'itemtype', targetPath: join(exportWorkspace.folders.itemtypes, 'dirtyasset.json')}
+		]
+	});
+	let dirtyAfterPlan = collectVintageStoryDirtyRecords(dirtyProject);
+	assert.equal(dirtyAfterPlan.some(record => record.kind === VINTAGE_STORY_DIRTY_KINDS.MODINFO), true);
+	assert.equal(dirtyAfterPlan.some(record => record.kind === VINTAGE_STORY_DIRTY_KINDS.LANG), true);
+	assert.equal(dirtyAfterPlan.some(record => record.kind === VINTAGE_STORY_DIRTY_KINDS.EXPORT_PLAN), true);
+	clearVintageStoryDirtyFilesWrittenByReport(dirtyProject, {
+		written: [join(exportWorkspace.modRoot, 'modinfo.json')],
+		copied: [],
+		errors: ['lang failed']
+	});
+	let dirtyAfterPartialClear = collectVintageStoryDirtyRecords(dirtyProject);
+	assert.equal(dirtyAfterPartialClear.some(record => record.kind === VINTAGE_STORY_DIRTY_KINDS.MODINFO), false);
+	assert.equal(dirtyAfterPartialClear.some(record => record.kind === VINTAGE_STORY_DIRTY_KINDS.LANG), true);
+	assert.equal(dirtyAfterPartialClear.some(record => record.kind === VINTAGE_STORY_DIRTY_KINDS.EXPORT_PLAN), true);
+	setVintageStoryDirty(dirtyProject, VINTAGE_STORY_DIRTY_KINDS.ATTACHED_SHAPE, true, {
+		filePath: join(exportWorkspace.folders.shapes, 'item', 'attached.json')
+	});
+	assert.equal(collectVintageStoryDirtyRecords(dirtyProject).some(record => record.kind === VINTAGE_STORY_DIRTY_KINDS.ATTACHED_SHAPE), true);
+
+	const backupTarget = join(exportTemp, 'backup-test.json');
+	fs.writeFileSync(backupTarget, '{"old":true}\n', 'utf8');
+	const backupWrite = writeVintageStoryTextFile(backupTarget, '{"new":true}\n', {fs, PathModule}, {createBackups: true});
+	assert.equal(fs.existsSync(backupWrite.backupPath), true);
+	assert.equal(fs.readFileSync(backupWrite.backupPath, 'utf8'), '{"old":true}\n');
+	assert.equal(fs.readFileSync(backupTarget, 'utf8'), '{"new":true}\n');
+	const parsedBackup = parseVintageStoryBackupPath(backupWrite.backupPath);
+	assert.equal(parsedBackup.targetPath, backupTarget);
+	assert.equal(parsedBackup.timestamp.length, 14);
+	const uniqueBackupTarget = join(exportTemp, 'backup-unique.json');
+	fs.writeFileSync(uniqueBackupTarget, 'v1\n', 'utf8');
+	const fixedBackupTime = new Date('2026-06-23T12:34:56Z');
+	const firstUniqueBackup = writeVintageStoryTextFile(uniqueBackupTarget, 'v2\n', {fs, PathModule}, {createBackups: true, now: fixedBackupTime});
+	const secondUniqueBackup = writeVintageStoryTextFile(uniqueBackupTarget, 'v3\n', {fs, PathModule}, {createBackups: true, now: fixedBackupTime});
+	assert.notEqual(firstUniqueBackup.backupPath, secondUniqueBackup.backupPath);
+	assert.equal(fs.existsSync(firstUniqueBackup.backupPath), true);
+	assert.equal(fs.existsSync(secondUniqueBackup.backupPath), true);
+	assert.equal(parseVintageStoryBackupPath(secondUniqueBackup.backupPath).sequence, 1);
+	const restoreResult = restoreVintageStoryBackup(firstUniqueBackup.backupPath, {fs, PathModule}, {
+		createBackups: true,
+		now: new Date('2026-06-23T12:35:00Z')
+	});
+	assert.equal(restoreResult.targetPath, uniqueBackupTarget);
+	assert.equal(fs.readFileSync(uniqueBackupTarget, 'utf8'), 'v1\n');
+	assert.equal(fs.readFileSync(restoreResult.preRestoreBackupPath, 'utf8'), 'v3\n');
+	const partialExportRoot = join(exportTemp, 'PartialExport');
+	fs.mkdirSync(partialExportRoot, {recursive: true});
+	const blockerPath = join(partialExportRoot, 'blocker');
+	fs.writeFileSync(blockerPath, 'not a directory', 'utf8');
+	const partialExportReport = executeVintageStoryExportPlan({
+		errors: [],
+		entries: [
+			{kind: 'shape', action: 'write', targetPath: join(partialExportRoot, 'ok.json'), content: '{}\n'},
+			{kind: 'shape', action: 'write', targetPath: join(blockerPath, 'fail.json'), content: '{}\n'}
+		]
+	}, {fs, PathModule}, {createBackups: false});
+	assert.equal(partialExportReport.written.includes(join(partialExportRoot, 'ok.json')), true);
+	assert.equal(partialExportReport.created.includes(join(partialExportRoot, 'ok.json')), true);
+	assert.equal(partialExportReport.errors.length, 1);
+	assert.equal(partialExportReport.failed.length, 1);
+	assert.equal(partialExportReport.warnings.some(warning => warning.includes('Partial export completed')), true);
+	assert.equal(partialExportReport.warnings.some(warning => warning.includes('rollback')), true);
+	assert.equal(formatVintageStoryExportReport(partialExportReport).includes('failed:'), true);
+	assert.equal(formatVintageStoryExportReport(partialExportReport).includes('created:'), true);
+
 	const sourceTexture = join(exportTemp, 'source-textures', 'simpleitem.png');
 	fs.mkdirSync(PathModule.dirname(sourceTexture), {recursive: true});
 	fs.writeFileSync(sourceTexture, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
@@ -1651,11 +2695,16 @@ try {
 		langEntries: {'item-simpleitem': 'Simple Item'}
 	}, {fs, PathModule});
 	assert.equal(exportPlan.errors.length, 0);
-	assert.equal(exportPlan.entries.some(entry => entry.kind === 'modinfo'), true);
+	const exportModInfoEntry = exportPlan.entries.find(entry => entry.kind === 'modinfo');
+	const exportLangEntry = exportPlan.entries.find(entry => entry.kind === 'lang');
+	assert.equal(!!exportModInfoEntry, true);
+	assert.equal(exportModInfoEntry.targetPath, join(exportWorkspace.modRoot, 'modinfo.json'));
+	assert.equal(parseVintageStoryAssetText(exportModInfoEntry.content).modid, 'test');
 	assert.equal(exportPlan.entries.some(entry => entry.kind === 'itemtype'), true);
 	assert.equal(exportPlan.entries.some(entry => entry.kind === 'shape'), true);
 	assert.equal(exportPlan.entries.some(entry => entry.kind === 'texture'), true);
-	assert.equal(exportPlan.entries.some(entry => entry.kind === 'lang'), true);
+	assert.equal(!!exportLangEntry, true);
+	assert.equal(exportLangEntry.targetPath, getVintageStoryLangPath(exportWorkspace, 'en', PathModule));
 	const exportReport = executeVintageStoryExportPlan(exportPlan, {fs, PathModule}, {createBackups: false});
 	assert.equal(exportReport.errors.length, 0);
 	const exportedAssetPath = join(exportWorkspace.folders.itemtypes, 'simpleitem.json');
@@ -1672,21 +2721,121 @@ try {
 	const workspaceValidation = validateVintageStoryWorkspace(exportWorkspace, {fs, PathModule}, {skipTextures: false});
 	assert.equal(workspaceValidation.errors.length, 0);
 	assert.equal(workspaceValidation.warnings.some(warning => warning.includes('absolute filesystem path')), false);
+	const missingReferenceAssetPath = join(exportWorkspace.folders.itemtypes, 'missingref.json');
+	fs.writeFileSync(missingReferenceAssetPath, serializeGeneratedVintageStoryAsset({
+		code: 'missingref',
+		shape: {base: 'item/missingref'}
+	}), 'utf8');
+	const packageBaggage = [
+		['.git/config', '[core]\n'],
+		['node_modules/example/index.js', 'module.exports = {};\n'],
+		['temp/scratch.tmp', 'scratch\n'],
+		['types/generated/vintagebench.d.ts', 'export type Generated = string;\n'],
+		['.vscode/settings.json', '{}\n'],
+		['draft.bbmodel', '{}\n'],
+		['assets/other/itemtypes/leak.json', serializeGeneratedVintageStoryAsset({code: 'leak'})],
+		['assets/test/textures/vintagebench/preview/reference.png', '\x89PNG'],
+		['assets/test/shapes/vintagebench/preview/reference.json', JSON.stringify({textureWidth: 16, textureHeight: 16, elements: []}, null, '\t')]
+	];
+	packageBaggage.forEach(([relativePath, content]) => {
+		let target = join(exportWorkspace.modRoot, ...relativePath.split('/'));
+		fs.mkdirSync(PathModule.dirname(target), {recursive: true});
+		fs.writeFileSync(target, content);
+	});
 	const packagePath = join(exportTemp, 'test-1.0.0.zip');
 	const packageReport = await packageVintageStoryModWorkspace(exportWorkspace, packagePath, {fs, PathModule});
 	assert.equal(packageReport.errors.length, 0);
 	assert.equal(fs.existsSync(packagePath), true);
 	assert.equal(packageReport.included.includes('modinfo.json'), true);
 	assert.equal(packageReport.included.includes('assets/test/itemtypes/simpleitem.json'), true);
+	assert.equal(packageReport.included.includes('assets/test/lang/en.json'), true);
+	assert.equal(packageReport.included.includes('assets/test/textures/item/simpleitem.png'), true);
+	assert.equal(packageReport.warnings.some(warning => warning.includes('Missing shape')), true);
+	assert.equal(packageReport.diagnostics.every(issue => {
+		assertDetailedDiagnostic(issue);
+		return true;
+	}), true);
+	const missingShapeDiagnostic = packageReport.diagnostics.find(issue => issue.code === 'missing_shape');
+	assertDetailedDiagnostic(missingShapeDiagnostic);
+	assert.equal(missingShapeDiagnostic.variantCode, 'missingref');
+	assert.equal(missingShapeDiagnostic.blocks, 'none');
+	assert.equal(packageReport.diagnostics.some(issue => issue.code === 'package_excluded_internal_file' && issue.severity === 'info' && issue.filePath === '.git/config'), true);
+	assert.equal(packageReport.diagnostics.some(issue => issue.code === 'package_excluded_internal_file' && issue.filePath.includes('vintagebench/preview')), true);
 	assert.equal(packageReport.included.some(path => path.includes('node_modules')), false);
+	assert.equal(packageReport.included.some(path => path.includes('vintagebench/preview')), false);
+	assert.equal(packageReport.included.some(path => path.startsWith('assets/other/')), false);
+	[
+		'.git/config',
+		'node_modules/example/index.js',
+		'temp/scratch.tmp',
+		'types/generated/vintagebench.d.ts',
+		'.vscode/settings.json',
+		'draft.bbmodel',
+		'assets/other/itemtypes/leak.json',
+		'assets/test/textures/vintagebench/preview/reference.png',
+		'assets/test/shapes/vintagebench/preview/reference.json'
+	].forEach(relativePath => assert.equal(packageReport.excluded.includes(relativePath), true, `${relativePath} should be excluded from package`));
 	const archive = await JSZip.loadAsync(fs.readFileSync(packagePath));
 	assert.ok(archive.file('modinfo.json'));
 	assert.ok(archive.file('assets/test/itemtypes/simpleitem.json'));
 	assert.ok(archive.file('assets/test/shapes/item/simpleitem.json'));
+	assert.ok(archive.file('assets/test/textures/item/simpleitem.png'));
+	assert.ok(archive.file('assets/test/lang/en.json'));
+	assert.equal(!!archive.file('node_modules/example/index.js'), false);
+	assert.equal(!!archive.file('assets/test/textures/vintagebench/preview/reference.png'), false);
+	assert.equal(!!archive.file('assets/other/itemtypes/leak.json'), false);
 	const modsFolder = join(exportTemp, 'Mods');
 	const copyReport = copyVintageStoryPackageToModsFolder(packagePath, modsFolder, {fs, PathModule}, {overwrite: true});
 	assert.equal(copyReport.errors.length, 0);
 	assert.equal(fs.existsSync(join(modsFolder, 'test-1.0.0.zip')), true);
+	const missingModInfoWorkspace = buildVintageStoryWorkspace({
+		modRoot: join(exportTemp, 'MissingModInfo'),
+		domain: 'missinginfo',
+		PathModule
+	});
+	fs.mkdirSync(missingModInfoWorkspace.assetsRoot, {recursive: true});
+	const missingModInfoValidation = validateVintageStoryWorkspace(missingModInfoWorkspace, {fs, PathModule});
+	assert.equal(missingModInfoValidation.errors.some(error => error.includes('modinfo.json is missing')), true);
+	const missingModInfoPackage = await packageVintageStoryModWorkspace(missingModInfoWorkspace, join(exportTemp, 'missinginfo.zip'), {fs, PathModule});
+	assert.equal(missingModInfoPackage.errors.some(error => error.includes('modinfo.json is missing')), true);
+	const missingAssetsWorkspace = buildVintageStoryWorkspace({
+		modRoot: join(exportTemp, 'MissingAssets'),
+		domain: 'missingassets',
+		PathModule
+	});
+	fs.mkdirSync(missingAssetsWorkspace.modRoot, {recursive: true});
+	fs.writeFileSync(join(missingAssetsWorkspace.modRoot, 'modinfo.json'), JSON.stringify(buildVintageStoryModInfo({modid: 'missingassets', name: 'Missing Assets'}), null, '\t'));
+	const missingAssetsValidation = validateVintageStoryWorkspace(missingAssetsWorkspace, {fs, PathModule});
+	assert.equal(missingAssetsValidation.errors.some(error => error.includes('assets/<domain> folder is missing')), true);
+	const placementWorkspace = buildVintageStoryWorkspace({
+		modRoot: join(exportTemp, 'PlacementMod'),
+		domain: 'placement',
+		PathModule
+	});
+	fs.mkdirSync(placementWorkspace.assetsRoot, {recursive: true});
+	fs.mkdirSync(placementWorkspace.folders.itemtypes, {recursive: true});
+	fs.mkdirSync(placementWorkspace.folders.shapes, {recursive: true});
+	fs.mkdirSync(join(placementWorkspace.assetsRoot, 'misc'), {recursive: true});
+	fs.writeFileSync(join(placementWorkspace.modRoot, 'modinfo.json'), JSON.stringify(buildVintageStoryModInfo({modid: 'placement', name: 'Placement Mod'}), null, '\t'));
+	fs.writeFileSync(join(placementWorkspace.folders.shapes, 'wrongasset.json'), serializeGeneratedVintageStoryAsset({code: 'wrongasset'}));
+	fs.writeFileSync(join(placementWorkspace.folders.itemtypes, 'wrongshape.json'), JSON.stringify({textureWidth: 16, textureHeight: 16, elements: []}, null, '\t'));
+	fs.writeFileSync(join(placementWorkspace.assetsRoot, 'misc', 'wrongtexture.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+	const placementValidation = validateVintageStoryWorkspace(placementWorkspace, {fs, PathModule});
+	assert.equal(placementValidation.errors.some(error => error.includes('item/block asset JSON must be under assets/<domain>/itemtypes or assets/<domain>/blocktypes')), true);
+	assert.equal(placementValidation.errors.some(error => error.includes('shape JSON must be under assets/<domain>/shapes')), true);
+	assert.equal(placementValidation.errors.some(error => error.includes('texture file must be under assets/<domain>/textures')), true);
+	assert.equal(placementValidation.diagnostics.every(issue => {
+		assertDetailedDiagnostic(issue);
+		return true;
+	}), true);
+	assert.equal(placementValidation.diagnostics.some(issue => issue.code === 'asset_json_outside_item_block_folder' && issue.blocks.includes('package')), true);
+	assert.equal(placementValidation.diagnostics.some(issue => issue.code === 'shape_json_outside_shapes_folder' && issue.blocks.includes('package')), true);
+	assert.equal(placementValidation.diagnostics.some(issue => issue.code === 'texture_file_outside_textures_folder' && issue.blocks.includes('package')), true);
+	const placementValidationText = formatVintageStoryValidationReport(placementValidation);
+	assert.equal(placementValidationText.includes('Diagnostics:'), true);
+	assert.equal(placementValidationText.includes('why:'), true);
+	assert.equal(placementValidationText.includes('fix:'), true);
+	assert.equal(placementValidationText.includes('blocks:'), true);
 	const badPlan = createVintageStoryExportPlan({
 		workspace: exportWorkspace,
 		modInfo: {modid: 'test', name: 'Bad Test', authors: 'P1nkOblivion', version: '1.0.0', dependenciesText: 'game='},
@@ -1696,6 +2845,81 @@ try {
 		shapeBase: 'item/badasset'
 	}, {fs, PathModule});
 	assert.equal(badPlan.errors.some(error => error.includes('absolute filesystem path')), true);
+	const badTraversalPlan = createVintageStoryExportPlan({
+		workspace: exportWorkspace,
+		modInfo: {modid: 'test', name: 'Bad Traversal', authors: 'P1nkOblivion', version: '1.0.0', dependenciesText: 'game='},
+		assetObject: {code: 'badtraversal', shape: {base: '../escape'}},
+		assetType: 'item',
+		shapeJson: exportShape,
+		shapeBase: '../escape'
+	}, {fs, PathModule});
+	assert.equal(badTraversalPlan.errors.some(error => error.includes('path traversal')), true);
+	const badTexturePlan = createVintageStoryExportPlan({
+		workspace: exportWorkspace,
+		modInfo: {modid: 'test', name: 'Bad Texture', authors: 'P1nkOblivion', version: '1.0.0', dependenciesText: 'game='},
+		assetObject: exportAsset,
+		assetType: 'item',
+		shapeJson: exportShape,
+		shapeBase: 'item/badtexture',
+		textureSources: {
+			aliases: {
+				outside: {
+					resolvedBase: '../escape',
+					resolvedFilePath: sourceTexture,
+					missing: false
+				}
+			}
+		},
+		copyTextures: true
+	}, {fs, PathModule});
+	assert.equal(badTexturePlan.errors.some(error => error.includes('invalid texture base path')), true);
+	const badLangPlan = createVintageStoryExportPlan({
+		workspace: exportWorkspace,
+		modInfo: {modid: 'test', name: 'Bad Lang', authors: 'P1nkOblivion', version: '1.0.0', dependenciesText: 'game='},
+		assetObject: exportAsset,
+		assetType: 'item',
+		shapeJson: exportShape,
+		shapeBase: 'item/badlang',
+		langEntries: {'item-badlang': 'Bad Lang'},
+		langPath: join(exportWorkspace.folders.textures, 'en.json')
+	}, {fs, PathModule});
+	assert.equal(badLangPlan.errors.some(error => error.includes('lang target must be under')), true);
+	const gameRootPlan = createVintageStoryExportPlan({
+		workspace: exportWorkspace,
+		gameAssetRoot: exportWorkspace.modRoot,
+		modInfo: {modid: 'test', name: 'Game Root', authors: 'P1nkOblivion', version: '1.0.0', dependenciesText: 'game='},
+		assetObject: exportAsset,
+		assetType: 'item',
+		shapeJson: exportShape,
+		shapeBase: 'item/gameroot'
+	}, {fs, PathModule});
+	assert.equal(gameRootPlan.errors.some(error => error.includes('game assets root')), true);
+	const explicitGameRootPlan = createVintageStoryExportPlan({
+		workspace: exportWorkspace,
+		gameAssetRoot: exportWorkspace.modRoot,
+		allowGameAssetWrites: true,
+		modInfo: {modid: 'test', name: 'Game Root Allowed', authors: 'P1nkOblivion', version: '1.0.0', dependenciesText: 'game='},
+		assetObject: exportAsset,
+		assetType: 'item',
+		shapeJson: exportShape,
+		shapeBase: 'item/gamerootallowed'
+	}, {fs, PathModule});
+	assert.equal(explicitGameRootPlan.errors.some(error => error.includes('game assets root')), false);
+	const unsafeWorkspaceAssetPath = join(exportWorkspace.folders.itemtypes, 'unsafe.json');
+	fs.writeFileSync(unsafeWorkspaceAssetPath, serializeGeneratedVintageStoryAsset({
+		code: 'unsafe',
+		shape: {base: '../escape'},
+		textures: {outside: {base: 'item\\unsafe'}}
+	}), 'utf8');
+	const unsafeWorkspaceValidation = validateVintageStoryWorkspace(exportWorkspace, {fs, PathModule}, {skipTextures: true});
+	assert.equal(unsafeWorkspaceValidation.errors.some(error => error.includes('path traversal')), true);
+	assert.equal(unsafeWorkspaceValidation.errors.some(error => error.includes('Windows backslash')), true);
+	assert.equal(unsafeWorkspaceValidation.diagnostics.every(issue => {
+		assertDetailedDiagnostic(issue);
+		return true;
+	}), true);
+	assert.equal(unsafeWorkspaceValidation.diagnostics.some(issue => issue.code === 'unsafe_asset_json_path' && issue.severity === 'error' && issue.blocks.includes('export')), true);
+	fs.rmSync(unsafeWorkspaceAssetPath, {force: true});
 } finally {
 	fs.rmSync(exportTemp, {recursive: true, force: true});
 }

@@ -179,7 +179,46 @@ Copied textures are placed under:
 assets/<domain>/textures/<texture base>.png
 ```
 
+The Texture Manager uses the same folder split: selected files are converted to texture asset-base paths when they already live under `assets/<domain>/textures`, or copied into that folder when they do not. If an identical texture already exists in the workspace, the existing copy is reused instead of creating another file.
+
 Texture aliases are preserved. Asset JSON texture paths remain Vintage Story asset paths, not filesystem paths.
+
+Export targets are folder-checked before execution:
+
+- shapes under `assets/<domain>/shapes`
+- textures under `assets/<domain>/textures`
+- item assets under `assets/<domain>/itemtypes`
+- block assets under `assets/<domain>/blocktypes`
+- lang under `assets/<domain>/lang`
+
+If a plan target is inside the configured Vintage Story game asset root, export fails unless the caller explicitly opts into game asset writes.
+
+## Asset Explorer
+
+The Asset Explorer panel scans the configured mod workspace:
+
+```text
+Mod Workspace
+  modinfo.json
+  assets/<domain>
+    itemtypes
+    blocktypes
+    shapes
+    textures
+    lang
+```
+
+Itemtype and blocktype rows open through the asset resolver so the user can choose the target variant. Shape rows open the raw shape JSON directly. The finder groups report:
+
+- item/block assets resolving to the current shape
+- missing texture aliases or files
+- unused shapes
+- unused textures
+- broken `attachedShapeBySlotCode` refs
+
+The package-folder action reveals the last successful package zip when one exists, otherwise it opens the configured package output folder.
+
+Alternate shapes referenced by `shape.alternates` count as used shapes in the explorer. If an alternate shape is currently open, export writes the current model to that alternate shape base and keeps the item/block asset's alternate list on the asset JSON.
 
 ## Lang Export
 
@@ -200,6 +239,9 @@ Existing lang entries are preserved unless overwrite is explicitly requested by 
 - modid/domain mismatch
 - `assets/<domain>` exists
 - standard asset folders exist
+- item/block asset JSON files are under `assets/<domain>/itemtypes` or `assets/<domain>/blocktypes`
+- shape JSON files are under `assets/<domain>/shapes`
+- texture image files are under `assets/<domain>/textures`
 - item/block assets parse
 - shape references resolve
 - texture references resolve
@@ -207,6 +249,7 @@ Existing lang entries are preserved unless overwrite is explicitly requested by 
 - ByType maps match at least one generated variant
 - exact ByType keys targeting skipped/disallowed variants
 - absolute filesystem paths in asset JSON
+- Windows backslashes or `..` traversal in asset JSON strings
 - display transforms found in shape JSON
 - interaction boxes found in shape JSON
 
@@ -224,7 +267,7 @@ Included:
 
 - `modinfo.json`
 - `modicon.png`, if present
-- `assets/**`
+- `assets/<domain>/**`
 
 Excluded:
 
@@ -237,7 +280,7 @@ Excluded:
 - local config folders
 - non-redistributable preview assets
 
-The package report lists included and excluded files.
+The package report lists included and excluded files. Packaging fails if `modinfo.json` would not be at the zip root or if the zip would not contain `assets/<domain>/` at the root.
 
 ## Mods Folder Copy
 

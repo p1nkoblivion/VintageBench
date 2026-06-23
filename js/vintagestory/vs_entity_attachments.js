@@ -121,7 +121,9 @@ function makeResolvedAttachment(raw, source, variant, resolve_shape_ref, warning
 		let raw_ref = slot_map[slot_code];
 		let resolved_base = normalizeCompositeBase(raw_ref);
 		let path_resolution = resolve_shape_ref?.(raw_ref, resolved_base) || {};
-		if (resolved_base && path_resolution.missing) {
+		if (resolved_base && path_resolution.invalid) {
+			addWarning(warnings, `Invalid attached shape for ${variant.variantCode} slot "${slot_code}": ${resolved_base} (${path_resolution.error})`);
+		} else if (resolved_base && path_resolution.missing) {
 			addWarning(warnings, `Missing attached shape for ${variant.variantCode} slot "${slot_code}": ${resolved_base}`);
 		}
 		slots.push({

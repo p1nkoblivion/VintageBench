@@ -80,31 +80,49 @@ export const VINTAGE_STORY_ASSET_PRESETS = [
 		validation: {requiredTransforms: ['guiTransform', 'groundTransform', 'tpHandTransform']}
 	},
 	{
-		id: 'shelfable_display_item',
-		label: 'Shelfable / Display Case Item',
-		description: 'Item intended for shelves and display cases using verified display attributes and display transforms.',
+		id: 'shelfable_item',
+		label: 'Shelfable Item',
+		description: 'Item intended for shelves using the verified shelvable attribute and shelf display transform.',
 		assetTypes: ['item'],
 		tags: ['item', 'shelf', 'display'],
 		verified: true,
 		requiredFields: ['code', 'shape'],
-		generatedFields: ['attributes.shelvable', 'attributes.displaycaseable', 'attributes.onshelfTransformByType', 'attributes.onDisplayTransformByType'],
-		transforms: ['onshelfTransform', 'onDisplayTransform'],
+		generatedFields: ['attributes.shelvable', 'attributes.onshelfTransformByType'],
+		transforms: ['onshelfTransform'],
 		formPatch: formPatch({
 			asset_type: 'item',
 			attr_shelvable: 'true',
+			include_display_transforms: true,
+			transform_mode: MODE.TRANSFORM_BY_TYPE_FALLBACK,
+			transform_onshelfTransform: true
+		}),
+		attributesPatch: {shelvable: true},
+		validation: {requiredTransforms: ['onshelfTransform']}
+	},
+	{
+		id: 'display_case_item',
+		label: 'Display Case Item',
+		description: 'Item intended for display cases using the verified displaycaseable attribute and display transform.',
+		assetTypes: ['item'],
+		tags: ['item', 'displaycase', 'display'],
+		verified: true,
+		requiredFields: ['code', 'shape'],
+		generatedFields: ['attributes.displaycaseable', 'attributes.onDisplayTransformByType'],
+		transforms: ['onDisplayTransform'],
+		formPatch: formPatch({
+			asset_type: 'item',
 			attr_displaycaseable: true,
 			include_display_transforms: true,
 			transform_mode: MODE.TRANSFORM_BY_TYPE_FALLBACK,
-			transform_onshelfTransform: true,
 			transform_onDisplayTransform: true
 		}),
-		attributesPatch: {shelvable: true, displaycaseable: true},
-		validation: {requiredTransforms: ['onshelfTransform', 'onDisplayTransform']}
+		attributesPatch: {displaycaseable: true},
+		validation: {requiredTransforms: ['onDisplayTransform']}
 	},
 	{
 		id: 'tool_rack_item',
-		label: 'Tool Rack Item',
-		description: 'Item that can be displayed on tool racks with a verified rackable attribute and toolrack transform map.',
+		label: 'Rackable / Tool Rack Item',
+		description: 'Item that can be displayed on tool racks with the verified rackable attribute and toolrack transform needed for correct placement.',
 		assetTypes: ['item'],
 		tags: ['item', 'toolrack', 'display'],
 		verified: true,
@@ -169,21 +187,22 @@ export const VINTAGE_STORY_ASSET_PRESETS = [
 		validation: {requiredTransforms: ['onAntlerMountTransform']}
 	},
 	{
-		id: 'attachable_entity_item',
-		label: 'Attachable Entity Item',
-		description: 'Item with attachableToEntity category and optional attached shape slots.',
+		id: 'firepit_item',
+		label: 'Firepit Item',
+		description: 'Item with verified inFirePitProps transform support. Firepit gameplay fields remain advanced/manual.',
 		assetTypes: ['item'],
-		tags: ['item', 'wearable', 'attachment'],
+		tags: ['item', 'firepit', 'display'],
 		verified: true,
-		requiredFields: ['code', 'shape', 'categoryCode'],
-		generatedFields: ['attributes.attachableToEntity', 'attributesByType.*.attachableToEntity', 'attachedShapeBySlotCode'],
+		requiredFields: ['code', 'shape'],
+		generatedFields: ['attributes.inFirePitProps.transform', 'attributes.inFirePitPropsByType.*.transform'],
+		transforms: ['inFirePitPropsTransform'],
 		formPatch: formPatch({
 			asset_type: 'item',
-			include_attachable_to_entity: true,
-			attachment_mode: MODE.ATTACHMENT_BY_TYPE_FALLBACK,
-			attachment_category_code: 'toolholding'
+			include_display_transforms: true,
+			transform_mode: MODE.TRANSFORM_BY_TYPE_FALLBACK,
+			transform_inFirePitPropsTransform: true
 		}),
-		validation: {attachment: true}
+		validation: {requiredTransforms: ['inFirePitPropsTransform']}
 	},
 	{
 		id: 'simple_tool',
@@ -235,24 +254,21 @@ export const VINTAGE_STORY_ASSET_PRESETS = [
 		validation: {weaponStats: true}
 	},
 	{
-		id: 'firepit_forge_item',
-		label: 'Firepit / Forge Item',
-		description: 'Item with verified firepit/forge display transform targets. Firepit property objects remain advanced/manual.',
+		id: 'attachable_entity_item',
+		label: 'Attachable Entity Item',
+		description: 'Item with attachableToEntity category and optional attached shape slots.',
 		assetTypes: ['item'],
-		tags: ['item', 'firepit', 'forge', 'experimental'],
-		verified: false,
-		experimental: true,
-		requiredFields: ['code', 'shape'],
-		generatedFields: ['attributes.infirepitTransformByType', 'attributes.inForgeTransformByType'],
-		transforms: ['infirepitTransform', 'inForgeTransform'],
+		tags: ['item', 'wearable', 'attachment'],
+		verified: true,
+		requiredFields: ['code', 'shape', 'categoryCode'],
+		generatedFields: ['attributes.attachableToEntity', 'attributesByType.*.attachableToEntity', 'attachedShapeBySlotCode'],
 		formPatch: formPatch({
 			asset_type: 'item',
-			include_display_transforms: true,
-			transform_mode: MODE.TRANSFORM_BY_TYPE_FALLBACK,
-			transform_infirepitTransform: true,
-			transform_inForgeTransform: true
+			include_attachable_to_entity: true,
+			attachment_mode: MODE.ATTACHMENT_BY_TYPE_FALLBACK,
+			attachment_category_code: 'toolholding'
 		}),
-		validation: {requiredTransforms: ['infirepitTransform', 'inForgeTransform']}
+		validation: {attachment: true}
 	}
 ];
 
@@ -400,6 +416,20 @@ function transformContext(id) {
 	return VS_DISPLAY_CONTEXTS.find(context => context.id === id);
 }
 
+function makeTransformPatchEntry(context, transform) {
+	if (!context.valuePath?.length) return clone(transform);
+	let entry = {};
+	let cursor = entry;
+	for (let i = 0; i < context.valuePath.length - 1; i++) {
+		let part = context.valuePath[i];
+		let next_part = context.valuePath[i + 1];
+		cursor[part] = typeof next_part === 'number' ? [] : {};
+		cursor = cursor[part];
+	}
+	cursor[context.valuePath[context.valuePath.length - 1]] = clone(transform);
+	return entry;
+}
+
 function addPresetTransformsToPatch(patch, preset, config, warnings) {
 	let selected_variant = config.selectedVariantKey || config.selectedVariantCode || '';
 	let display_settings = config.displaySettings || {};
@@ -411,14 +441,15 @@ function addPresetTransformsToPatch(patch, preset, config, warnings) {
 			addWarning(warnings, `${preset.label} preset skipped ${context.jsonKey}; no current Display transform is configured.`);
 			return;
 		}
-		let map_key = selected_variant ? `${context.jsonKey}ByType` : context.jsonKey;
+		let map_key = selected_variant ? (context.mapKey || `${context.jsonKey}ByType`) : context.jsonKey;
 		let path = context.location === 'attributes' ? ['attributes', map_key] : [map_key];
+		let entry = makeTransformPatchEntry(context, transform);
 		if (selected_variant) {
 			let map = {};
-			map[selected_variant] = transform;
+			map[selected_variant] = entry;
 			setPatchPath(patch, path, map);
 		} else {
-			setPatchPath(patch, path, transform);
+			setPatchPath(patch, path, entry);
 		}
 	});
 }

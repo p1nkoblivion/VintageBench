@@ -20,9 +20,25 @@ import {
 	cloneVintageStoryAttachments
 } from './vs_entity_attachments.js';
 import {
+	applyTextureOverrideToAssetObject,
+	cloneVintageStoryTextureEntries,
+	collectVintageStoryTextureEntries
+} from './vs_texture_manager.js';
+import {
+	applyShapeAlternativesToAssetObject,
+	cloneVintageStoryShapeAlternatives
+} from './vs_shape_alternatives.js';
+import {
 	displaySlotToVintageStoryTransform,
 	vintageStoryTransformToDisplaySlot
 } from '../display_mode/vintage_story_display_transforms.js';
+import {
+	clearVintageStoryDirtyFile,
+	collectVintageStoryDirtyRecords,
+	formatVintageStoryDirtyRecords,
+	VINTAGE_STORY_DIRTY_KINDS
+} from './vs_dirty_state.js';
+import { writeVintageStoryTextFile } from './vs_file_write_safety.js';
 
 function addWarning(warnings, message) {
 	if (warnings && message && !warnings.includes(message)) warnings.push(message);
@@ -59,6 +75,45 @@ function showWarnings(title, warnings) {
 		icon: 'warning',
 		message: warnings.slice(0, 12).join('\n') + (warnings.length > 12 ? `\n...and ${warnings.length - 12} more.` : '')
 	});
+}
+
+function shouldCreateBackups() {
+	return settings?.vintage_story_create_backups?.value !== false;
+}
+
+function writeAssetDocumentWithBackup(path, document) {
+	return writeVintageStoryTextFile(path, serializeVintageStoryAssetDocument(document), {fs, PathModule}, {
+		createBackups: shouldCreateBackups()
+	});
+}
+
+function confirmSwitchAwayFromDirtyShape(next_target) {
+	if (!Project?.vintage_story_data) return true;
+	let current_target = Project.vintage_story_data.editing_target || Project.vintage_story_data.asset_context?.current_shape_target || {};
+	let current_path = current_target.shape_path || Project.save_path || Project.export_path || '';
+	let next_path = next_target?.shape_path || '';
+	let current_key = `${current_target.kind || 'main'}|${String(current_path).replace(/\\/g, '/').toLowerCase()}`;
+	let next_key = `${next_target?.kind || 'main'}|${String(next_path).replace(/\\/g, '/').toLowerCase()}`;
+	if (current_key === next_key) return true;
+	let records = collectVintageStoryDirtyRecords(Project).filter(record => {
+		return record.kind === VINTAGE_STORY_DIRTY_KINDS.MAIN_SHAPE
+			|| record.kind === VINTAGE_STORY_DIRTY_KINDS.ATTACHED_SHAPE
+			|| record.kind === VINTAGE_STORY_DIRTY_KINDS.ASSET;
+	});
+	if (!records.length) return true;
+	let message = `Switching shapes would leave unsaved Vintage Story edits behind:\n\n${formatVintageStoryDirtyRecords(records)}`;
+	let result = dialog?.showMessageBoxSync
+		? dialog.showMessageBoxSync(currentwindow, {
+			type: 'warning',
+			noLink: true,
+			title: 'Switch Vintage Story Shape?',
+			message,
+			cancelId: 1,
+			defaultId: 1,
+			buttons: ['Switch Anyway', 'Cancel']
+		})
+		: 0;
+	return result === 0;
 }
 
 function makeOptionLabel(asset_entry, index) {
@@ -242,17 +297,20 @@ export function applyVintageStoryAssetContextToProject(resolved, open_options = 
 		selected_states: cloneJSON(resolved.states),
 		resolved_shape_path: resolved.shape?.resolvedFilePath || '',
 		shape: cloneJSON(resolved.shape),
+		shape_alternatives: cloneVintageStoryShapeAlternatives(resolved.shape?.alternates || []),
 		texture_sources: cloneJSON(resolved.textures),
 		transform_sources: cloneJSON(resolved.transforms),
 		interaction_box_sources: cloneInteractionBoxes(resolved.interactionBoxes || []),
 		attachment_sources: cloneVintageStoryAttachments(resolved.attachments),
 		open_without_textures: !!open_options.openWithoutTextures,
 		warnings: cloneJSON(resolved.warnings || []),
-		current_shape_target: {kind: 'main', shape_path: resolved.shape?.resolvedFilePath || ''}
+		current_shape_target: {kind: 'main', shape_path: resolved.shape?.resolvedFilePath || '', shape_base: resolved.shape?.resolvedBase || ''}
 	};
+	vs_data.shape_alternatives = cloneVintageStoryShapeAlternatives(resolved.shape?.alternates || []);
+	vs_data.texture_manager_entries = collectVintageStoryTextureEntries({texture_sources: resolved.textures});
 	vs_data.interaction_boxes = cloneInteractionBoxes(resolved.interactionBoxes || []);
 	vs_data.attachments = cloneVintageStoryAttachments(resolved.attachments);
-	vs_data.editing_target = {kind: 'main', shape_path: resolved.shape?.resolvedFilePath || ''};
+	vs_data.editing_target = {kind: 'main', shape_path: resolved.shape?.resolvedFilePath || '', shape_base: resolved.shape?.resolvedBase || ''};
 	let display_settings = Project.display_settings || (Project.display_settings = {});
 	for (let id in resolved.transforms || {}) {
 		let transform = resolved.transforms[id];
@@ -303,6 +361,7 @@ function openResolvedShape(resolved, open_options = {}) {
 		showError('Vintage Story Asset Resolver', `Could not open ${resolved.variantCode}; the resolved shape is missing.`);
 		return;
 	}
+	if (!confirmSwitchAwayFromDirtyShape({kind: 'main', shape_path: resolved.shape.resolvedFilePath})) return;
 	let file = {
 		name: pathToName(resolved.shape.resolvedFilePath, true),
 		path: resolved.shape.resolvedFilePath,
@@ -347,12 +406,14 @@ export function openVintageStoryAttachedShape(attachment, slot, open_options = {
 			showError('Open Attached Shape', `The attached shape for slot "${slot?.slotCode || 'unknown'}" is missing.`);
 			return;
 		}
+		if (!confirmSwitchAwayFromDirtyShape({kind: 'attached_shape', shape_path: slot.resolvedShapeFilePath})) return;
 		let content = fs.readFileSync(slot.resolvedShapeFilePath, 'utf8');
 		let shape_json = parseVintageStoryAssetText(content, slot.resolvedShapeFilePath);
 		let previous_data = Project?.vintage_story_data || {};
 		let asset_context = cloneJSON(previous_data.asset_context || {});
 		let attachments = cloneVintageStoryAttachments(previous_data.attachments || attachment);
 		let interaction_boxes = cloneInteractionBoxes(previous_data.interaction_boxes || []);
+		let shape_alternatives = cloneVintageStoryShapeAlternatives(previous_data.shape_alternatives || asset_context.shape_alternatives || []);
 		let file = {
 			name: pathToName(slot.resolvedShapeFilePath, true),
 			path: slot.resolvedShapeFilePath,
@@ -364,6 +425,7 @@ export function openVintageStoryAttachedShape(attachment, slot, open_options = {
 		vs_data.asset_context = asset_context;
 		vs_data.attachments = attachments;
 		vs_data.interaction_boxes = interaction_boxes;
+		vs_data.shape_alternatives = shape_alternatives;
 		vs_data.editing_target = {
 			kind: 'attached_shape',
 			slot_code: slot.slotCode,
@@ -384,6 +446,56 @@ export function openVintageStoryAttachedShape(attachment, slot, open_options = {
 		Blockbench?.showQuickMessage?.(`Opened attached shape ${slot.slotCode}.`);
 	} catch (error) {
 		showError('Open Attached Shape', error.message || String(error));
+	}
+}
+
+export function openVintageStoryAlternateShape(alternate, open_options = {}) {
+	try {
+		let path = alternate?.resolvedShapeFilePath || alternate?.resolvedFilePath || '';
+		if (!path || alternate.missing) {
+			showError('Open Alternate Shape', `The alternate shape "${alternate?.resolvedBase || 'unknown'}" is missing.`);
+			return;
+		}
+		if (!confirmSwitchAwayFromDirtyShape({kind: 'alternate_shape', shape_path: path})) return;
+		let content = fs.readFileSync(path, 'utf8');
+		let shape_json = parseVintageStoryAssetText(content, path);
+		let previous_data = Project?.vintage_story_data || {};
+		let asset_context = cloneJSON(previous_data.asset_context || {});
+		let attachments = cloneVintageStoryAttachments(previous_data.attachments || {});
+		let interaction_boxes = cloneInteractionBoxes(previous_data.interaction_boxes || []);
+		let shape_alternatives = cloneVintageStoryShapeAlternatives(previous_data.shape_alternatives || asset_context.shape_alternatives || []);
+		let file = {
+			name: pathToName(path, true),
+			path,
+			content: JSON.stringify(shape_json),
+			no_file: false
+		};
+		Codecs.vintage_story_json.load(shape_json, file, makeTextureImportContextFromAssetContext(asset_context, open_options));
+		let vs_data = Project.vintage_story_data || (Project.vintage_story_data = {});
+		vs_data.asset_context = asset_context;
+		vs_data.attachments = attachments;
+		vs_data.interaction_boxes = interaction_boxes;
+		vs_data.shape_alternatives = shape_alternatives;
+		vs_data.editing_target = {
+			kind: 'alternate_shape',
+			alternate_index: alternate.index,
+			shape_path: path,
+			shape_base: alternate.resolvedBase,
+			shape_source: cloneJSON(alternate.shapeSourcePointer || alternate.sourcePointer || asset_context.shape || {})
+		};
+		vs_data.asset_context.current_shape_target = cloneJSON(vs_data.editing_target);
+		Project.name = `${asset_context.selected_variant_code || asset_context.asset_code || 'alternate'}-${alternate.index + 1}`;
+		Project.save_path = path;
+		Project.export_path = path;
+		Project.export_codec = 'vintage_story_json';
+		addRecentProject({
+			name: Project.name,
+			path,
+			icon: Format.icon
+		});
+		Blockbench?.showQuickMessage?.(`Opened alternate shape ${alternate.resolvedBase}.`);
+	} catch (error) {
+		showError('Open Alternate Shape', error.message || String(error));
 	}
 }
 
@@ -428,86 +540,226 @@ function confirmVanillaAssetWrite(source_path) {
 }
 
 export function writeVintageStoryAssetTransformEdits(asset_context, display_settings) {
-	if (!asset_context?.source_file_path || !display_settings) return {changed: false, warnings: []};
+	if (!asset_context?.source_file_path || !display_settings) return {changed: false, warnings: [], errors: [], backups: []};
 	let warnings = [];
+	let errors = [];
+	let backups = [];
 	let edited_slots = Object.values(display_settings).filter(slot => slot?.vintage_story?.asset_source?.dirty);
-	if (!edited_slots.length) return {changed: false, warnings};
+	if (!edited_slots.length) return {changed: false, warnings, errors, backups};
 	if (!confirmVanillaAssetWrite(asset_context.source_file_path)) {
 		addWarning(warnings, 'Skipped item/block transform writeback because the source file is inside the configured game assets root.');
-		return {changed: false, warnings, cancelled: true};
+		return {changed: false, warnings, errors, backups, cancelled: true};
 	}
 	let text = fs.readFileSync(asset_context.source_file_path, 'utf8');
 	let document = parseVintageStoryAssetDocument(text, asset_context.source_file_path);
 	let asset_object = document.assetObjects?.[asset_context.source_object_index || 0]?.object;
 	if (!asset_object) {
 		addWarning(warnings, 'Could not find the original asset object for transform writeback.');
-		return {changed: false, warnings};
+		return {changed: false, warnings, errors, backups};
 	}
 	let changed = false;
+	let applied_slots = [];
 	edited_slots.forEach(slot => {
 		let source = slot.vintage_story.asset_source;
 		let transform = displaySlotToVintageStoryTransform(slot);
 		if (!transform && !source.deleteOverride) return;
 		if (applyTransformEditToAssetObject(asset_object, source, transform || {})) {
-			source.dirty = false;
+			applied_slots.push(slot);
 			changed = true;
 		}
 	});
-	if (!changed) return {changed: false, warnings};
-	fs.writeFileSync(asset_context.source_file_path, serializeVintageStoryAssetDocument(document), 'utf8');
-	return {changed: true, warnings};
+	if (!changed) return {changed: false, warnings, errors, backups};
+	try {
+		let write = writeAssetDocumentWithBackup(asset_context.source_file_path, document);
+		if (write.backupPath) backups.push(write.backupPath);
+		applied_slots.forEach(slot => {
+			slot.vintage_story.asset_source.dirty = false;
+		});
+		clearVintageStoryDirtyFile(Project, VINTAGE_STORY_DIRTY_KINDS.ASSET, asset_context.source_file_path);
+		return {changed: true, warnings, errors, backups};
+	} catch (error) {
+		let message = `Could not write item/block transform edits to ${asset_context.source_file_path}: ${error.message || error}`;
+		errors.push(message);
+		return {changed: false, warnings, errors, backups};
+	}
+}
+
+export function writeVintageStoryAssetTextureEdits(asset_context, entries) {
+	if (!asset_context?.source_file_path || !Array.isArray(entries)) return {changed: false, warnings: [], errors: [], backups: []};
+	let warnings = [];
+	let errors = [];
+	let backups = [];
+	let edited_entries = entries.filter(entry => entry?.dirty && entry?.alias);
+	if (!edited_entries.length) return {changed: false, warnings, errors, backups};
+	if (!confirmVanillaAssetWrite(asset_context.source_file_path)) {
+		addWarning(warnings, 'Skipped item/block texture writeback because the source file is inside the configured game assets root.');
+		return {changed: false, warnings, errors, backups, cancelled: true};
+	}
+	let text = fs.readFileSync(asset_context.source_file_path, 'utf8');
+	let document = parseVintageStoryAssetDocument(text, asset_context.source_file_path);
+	let asset_object = document.assetObjects?.[asset_context.source_object_index || 0]?.object;
+	if (!asset_object) {
+		addWarning(warnings, 'Could not find the original asset object for texture writeback.');
+		return {changed: false, warnings, errors, backups};
+	}
+	let changed = false;
+	let applied_entries = [];
+	edited_entries.forEach(entry => {
+		let source = entry.sourcePointer || entry;
+		if (!source?.alias) {
+			addWarning(warnings, `Skipped texture alias "${entry.alias}" because it has no editable source pointer.`);
+			return;
+		}
+		if (applyTextureOverrideToAssetObject(asset_object, source, entry.rawRef)) {
+			applied_entries.push(entry);
+			changed = true;
+		}
+	});
+	if (!changed) return {changed: false, warnings, errors, backups};
+	try {
+		let write = writeAssetDocumentWithBackup(asset_context.source_file_path, document);
+		if (write.backupPath) backups.push(write.backupPath);
+		if (!asset_context.texture_sources) asset_context.texture_sources = {aliases: {}};
+		if (!asset_context.texture_sources.aliases) asset_context.texture_sources.aliases = {};
+		applied_entries.forEach(entry => {
+			entry.dirty = false;
+			asset_context.texture_sources.aliases[entry.alias] = cloneJSON(entry);
+		});
+		if (Project?.vintage_story_data?.texture_manager_entries) {
+			Project.vintage_story_data.texture_manager_entries = cloneVintageStoryTextureEntries(entries);
+		}
+		clearVintageStoryDirtyFile(Project, VINTAGE_STORY_DIRTY_KINDS.ASSET, asset_context.source_file_path);
+		return {changed: true, warnings, errors, backups};
+	} catch (error) {
+		let message = `Could not write item/block texture edits to ${asset_context.source_file_path}: ${error.message || error}`;
+		errors.push(message);
+		return {changed: false, warnings, errors, backups};
+	}
+}
+
+export function writeVintageStoryAssetShapeAlternativeEdits(asset_context, alternatives) {
+	if (!asset_context?.source_file_path || !Array.isArray(alternatives)) return {changed: false, warnings: [], errors: [], backups: []};
+	let warnings = [];
+	let errors = [];
+	let backups = [];
+	let dirty = alternatives.some(alternate => alternate?.dirty);
+	if (!dirty) return {changed: false, warnings, errors, backups};
+	if (!confirmVanillaAssetWrite(asset_context.source_file_path)) {
+		addWarning(warnings, 'Skipped item/block shape alternate writeback because the source file is inside the configured game assets root.');
+		return {changed: false, warnings, errors, backups, cancelled: true};
+	}
+	let source = alternatives.find(alternate => alternate?.sourcePointer)?.sourcePointer
+		|| alternatives.find(alternate => alternate?.shapeSourcePointer)?.shapeSourcePointer
+		|| asset_context.shape;
+	if (!source) {
+		addWarning(warnings, 'Could not find the original shape source for alternate writeback.');
+		return {changed: false, warnings, errors, backups};
+	}
+	let text = fs.readFileSync(asset_context.source_file_path, 'utf8');
+	let document = parseVintageStoryAssetDocument(text, asset_context.source_file_path);
+	let asset_object = document.assetObjects?.[asset_context.source_object_index || 0]?.object;
+	if (!asset_object) {
+		addWarning(warnings, 'Could not find the original asset object for shape alternate writeback.');
+		return {changed: false, warnings, errors, backups};
+	}
+	if (!applyShapeAlternativesToAssetObject(asset_object, source, alternatives)) {
+		addWarning(warnings, 'Could not write shape alternates to the item/block asset.');
+		return {changed: false, warnings, errors, backups};
+	}
+	try {
+		let write = writeAssetDocumentWithBackup(asset_context.source_file_path, document);
+		if (write.backupPath) backups.push(write.backupPath);
+		alternatives.forEach(alternate => {
+			alternate.dirty = false;
+		});
+		asset_context.shape_alternatives = cloneVintageStoryShapeAlternatives(alternatives);
+		if (asset_context.shape) asset_context.shape.alternates = cloneVintageStoryShapeAlternatives(alternatives);
+		if (Project?.vintage_story_data?.shape_alternatives) {
+			Project.vintage_story_data.shape_alternatives = cloneVintageStoryShapeAlternatives(alternatives);
+		}
+		clearVintageStoryDirtyFile(Project, VINTAGE_STORY_DIRTY_KINDS.ASSET, asset_context.source_file_path);
+		return {changed: true, warnings, errors, backups};
+	} catch (error) {
+		let message = `Could not write item/block shape alternate edits to ${asset_context.source_file_path}: ${error.message || error}`;
+		errors.push(message);
+		return {changed: false, warnings, errors, backups};
+	}
 }
 
 export function writeVintageStoryAssetInteractionBoxEdits(asset_context, boxes) {
-	if (!asset_context?.source_file_path || !Array.isArray(boxes)) return {changed: false, warnings: []};
+	if (!asset_context?.source_file_path || !Array.isArray(boxes)) return {changed: false, warnings: [], errors: [], backups: []};
 	let warnings = [];
+	let errors = [];
+	let backups = [];
 	let edited_boxes = boxes.filter(box => box?.dirty && box?.sourcePointer);
-	if (!edited_boxes.length) return {changed: false, warnings};
+	if (!edited_boxes.length) return {changed: false, warnings, errors, backups};
 	if (!confirmVanillaAssetWrite(asset_context.source_file_path)) {
 		addWarning(warnings, 'Skipped item/block interaction box writeback because the source file is inside the configured game assets root.');
-		return {changed: false, warnings, cancelled: true};
+		return {changed: false, warnings, errors, backups, cancelled: true};
 	}
 	let text = fs.readFileSync(asset_context.source_file_path, 'utf8');
 	let document = parseVintageStoryAssetDocument(text, asset_context.source_file_path);
 	let asset_object = document.assetObjects?.[asset_context.source_object_index || 0]?.object;
 	if (!asset_object) {
 		addWarning(warnings, 'Could not find the original asset object for interaction box writeback.');
-		return {changed: false, warnings};
+		return {changed: false, warnings, errors, backups};
 	}
 	let changed = false;
+	let applied_boxes = [];
 	edited_boxes.forEach(box => {
 		let source = box.sourcePointer;
 		if (applyInteractionBoxEditToAssetObject(asset_object, source, box.value)) {
-			box.dirty = false;
+			applied_boxes.push(box);
 			changed = true;
 		}
 	});
-	if (!changed) return {changed: false, warnings};
-	fs.writeFileSync(asset_context.source_file_path, serializeVintageStoryAssetDocument(document), 'utf8');
-	return {changed: true, warnings};
+	if (!changed) return {changed: false, warnings, errors, backups};
+	try {
+		let write = writeAssetDocumentWithBackup(asset_context.source_file_path, document);
+		if (write.backupPath) backups.push(write.backupPath);
+		applied_boxes.forEach(box => {
+			box.dirty = false;
+		});
+		clearVintageStoryDirtyFile(Project, VINTAGE_STORY_DIRTY_KINDS.ASSET, asset_context.source_file_path);
+		return {changed: true, warnings, errors, backups};
+	} catch (error) {
+		let message = `Could not write item/block interaction box edits to ${asset_context.source_file_path}: ${error.message || error}`;
+		errors.push(message);
+		return {changed: false, warnings, errors, backups};
+	}
 }
 
 export function writeVintageStoryAssetAttachmentEdits(asset_context, attachment) {
-	if (!asset_context?.source_file_path || !attachment?.dirty || !attachment?.sourcePointer) return {changed: false, warnings: []};
+	if (!asset_context?.source_file_path || !attachment?.dirty || !attachment?.sourcePointer) return {changed: false, warnings: [], errors: [], backups: []};
 	let warnings = [];
+	let errors = [];
+	let backups = [];
 	if (!confirmVanillaAssetWrite(asset_context.source_file_path)) {
 		addWarning(warnings, 'Skipped item/block attachment writeback because the source file is inside the configured game assets root.');
-		return {changed: false, warnings, cancelled: true};
+		return {changed: false, warnings, errors, backups, cancelled: true};
 	}
 	let text = fs.readFileSync(asset_context.source_file_path, 'utf8');
 	let document = parseVintageStoryAssetDocument(text, asset_context.source_file_path);
 	let asset_object = document.assetObjects?.[asset_context.source_object_index || 0]?.object;
 	if (!asset_object) {
 		addWarning(warnings, 'Could not find the original asset object for attachment writeback.');
-		return {changed: false, warnings};
+		return {changed: false, warnings, errors, backups};
 	}
 	if (!applyAttachmentEditToAssetObject(asset_object, attachment.sourcePointer, attachment)) {
 		addWarning(warnings, 'Could not write attachment edits to the item/block asset.');
-		return {changed: false, warnings};
+		return {changed: false, warnings, errors, backups};
 	}
-	attachment.dirty = false;
-	fs.writeFileSync(asset_context.source_file_path, serializeVintageStoryAssetDocument(document), 'utf8');
-	return {changed: true, warnings};
+	try {
+		let write = writeAssetDocumentWithBackup(asset_context.source_file_path, document);
+		if (write.backupPath) backups.push(write.backupPath);
+		attachment.dirty = false;
+		clearVintageStoryDirtyFile(Project, VINTAGE_STORY_DIRTY_KINDS.ASSET, asset_context.source_file_path);
+		return {changed: true, warnings, errors, backups};
+	} catch (error) {
+		let message = `Could not write item/block attachment edits to ${asset_context.source_file_path}: ${error.message || error}`;
+		errors.push(message);
+		return {changed: false, warnings, errors, backups};
+	}
 }
 
 export function saveVintageStoryAssetContextEdits() {
@@ -517,18 +769,36 @@ export function saveVintageStoryAssetContextEdits() {
 		return;
 	}
 	let warnings = [];
+	let errors = [];
+	let backups = [];
 	let changed = false;
 	let cancelled = false;
 	[
-		writeVintageStoryAssetTransformEdits(asset_context, Project?.display_settings),
-		writeVintageStoryAssetInteractionBoxEdits(asset_context, Project?.vintage_story_data?.interaction_boxes),
-		writeVintageStoryAssetAttachmentEdits(asset_context, Project?.vintage_story_data?.attachments)
-	].forEach(result => {
+		() => writeVintageStoryAssetTransformEdits(asset_context, Project?.display_settings),
+		() => writeVintageStoryAssetShapeAlternativeEdits(asset_context, Project?.vintage_story_data?.shape_alternatives),
+		() => writeVintageStoryAssetTextureEdits(asset_context, Project?.vintage_story_data?.texture_manager_entries),
+		() => writeVintageStoryAssetInteractionBoxEdits(asset_context, Project?.vintage_story_data?.interaction_boxes),
+		() => writeVintageStoryAssetAttachmentEdits(asset_context, Project?.vintage_story_data?.attachments)
+	].forEach(writer => {
+		let result;
+		try {
+			result = writer();
+		} catch (error) {
+			addWarning(errors, error.message || String(error));
+			return;
+		}
 		if (!result) return;
 		changed = changed || !!result.changed;
 		cancelled = cancelled || !!result.cancelled;
 		(result.warnings || []).forEach(warning => addWarning(warnings, warning));
+		(result.errors || []).forEach(error => addWarning(errors, error));
+		(result.backups || []).forEach(backup => addWarning(backups, backup));
 	});
+	if (backups.length) addWarning(warnings, `Created ${backups.length} backup${backups.length === 1 ? '' : 's'} before overwriting.`);
+	if (errors.length) {
+		showError('Save Asset', errors.concat(warnings).join('\n'));
+		return;
+	}
 	if (warnings.length) showWarnings('Save Asset', warnings);
 	if (cancelled) return;
 	let name = PathModule?.basename ? PathModule.basename(asset_context.source_file_path) : 'asset JSON';
@@ -582,10 +852,13 @@ if (typeof window !== 'undefined') {
 		openVintageStoryAssetFile,
 		applyVintageStoryAssetContextToProject,
 		writeVintageStoryAssetTransformEdits,
+		writeVintageStoryAssetShapeAlternativeEdits,
+		writeVintageStoryAssetTextureEdits,
 		writeVintageStoryAssetInteractionBoxEdits,
 		writeVintageStoryAssetAttachmentEdits,
 		saveVintageStoryAssetContextEdits,
-		openVintageStoryAttachedShape
+		openVintageStoryAttachedShape,
+		openVintageStoryAlternateShape
 	});
 	registerVintageStoryAssetWorkflow();
 }

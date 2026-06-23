@@ -1,3 +1,47 @@
+function normalizeValidatorBlocks(blocks, severity) {
+	if (typeof blocks === 'string') return blocks || 'none';
+	if (Array.isArray(blocks)) return blocks.length ? blocks.join(', ') : 'none';
+	if (blocks && typeof blocks === 'object') {
+		let names = ['save', 'export', 'package'].filter(key => blocks[key]);
+		return names.length ? names.join(', ') : 'none';
+	}
+	return severity === 'error' ? 'save/export until fixed' : 'none';
+}
+
+function currentValidatorFilePath() {
+	return Project?.save_path || Project?.export_path || Project?.name || 'current project';
+}
+
+function normalizeValidatorProblem(raw, force_error = false) {
+	let object = raw && typeof raw === 'object' ? raw : {message: String(raw || '')};
+	let severity = String(object.severity || object.level || (object.error || force_error ? 'error' : 'warning')).toLowerCase();
+	if (!['info', 'warning', 'error'].includes(severity)) severity = force_error ? 'error' : 'warning';
+	let what = object.what || object.message || String(raw || 'Validation issue.');
+	let problem = Object.assign({}, object, {
+		severity,
+		error: severity === 'error',
+		message: object.message || what,
+		what,
+		filePath: object.filePath || object.file || currentValidatorFilePath(),
+		jsonPath: object.jsonPath || object.path || 'n/a',
+		variantCode: object.variantCode || object.variant || 'n/a',
+		why: object.why || 'This can make the model, asset, export, or package behave differently than intended.',
+		suggestedFix: object.suggestedFix || object.fix || 'Inspect the referenced data and correct the highlighted field.',
+		blocks: normalizeValidatorBlocks(object.blocks ?? object.blocking, severity),
+		buttons: object.buttons
+	});
+	problem.details = [
+		{label: 'Severity', value: problem.severity},
+		{label: 'File', value: problem.filePath},
+		{label: 'JSON path', value: problem.jsonPath},
+		{label: 'Variant', value: problem.variantCode},
+		{label: 'Why it matters', value: problem.why},
+		{label: 'Suggested fix', value: problem.suggestedFix},
+		{label: 'Blocks', value: problem.blocks}
+	];
+	return problem;
+}
+
 export const Validator = {
 	checks: [],
 
@@ -55,19 +99,36 @@ export const Validator = {
 					}},
 					computed: {
 						problems() {
-							this.errors.forEach(error => error.error = true);
-							return [...this.errors, ...this.warnings]
+							return [
+								...this.errors.map(error => normalizeValidatorProblem(error, true)),
+								...this.warnings.map(warning => normalizeValidatorProblem(warning, false))
+							]
 						}
 					},
 					methods: {
 						getIconNode: Blockbench.getIconNode,
-						pureMarked
+						pureMarked,
+						problemIcon(problem) {
+							if (problem.severity === 'info') return 'info';
+							return problem.error ? 'error' : 'warning';
+						}
 					},
 					template: `
 						<ul>
-							<li v-for="problem in problems" class="validator_dialog_problem" :class="problem.error ? 'validator_error' : 'validator_warning'" :key="problem.message">
-								<i class="material-icons">{{ problem.error ? 'error' : 'warning' }}</i>
-								<span class="markdown" v-html="pureMarked(problem.message.replace(/\\n/g, '\\n\\n'))"></span>
+							<li v-for="problem in problems" class="validator_dialog_problem" :class="'validator_' + problem.severity" :key="problem.message + problem.filePath + problem.jsonPath + problem.variantCode">
+								<i class="material-icons">{{ problemIcon(problem) }}</i>
+								<div class="validator_problem_body">
+									<div class="validator_problem_title">
+										<span class="validator_problem_severity">{{ problem.severity }}</span>
+										<span class="markdown" v-html="pureMarked(String(problem.what).replace(/\\n/g, '\\n\\n'))"></span>
+									</div>
+									<div class="validator_problem_details">
+										<div v-for="detail in problem.details" class="validator_problem_detail" :key="detail.label">
+											<label>{{ detail.label }}</label>
+											<span>{{ detail.value }}</span>
+										</div>
+									</div>
+								</div>
 								<template v-if="problem.buttons">
 									<div v-for="button in problem.buttons" class="tool" :title="button.name" @click="button.click($event)">
 										<div class="icon_wrapper plugin_icon normal" v-html="getIconNode(button.icon, button.color).outerHTML"></div>

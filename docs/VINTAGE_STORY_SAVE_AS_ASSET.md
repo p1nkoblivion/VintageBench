@@ -91,7 +91,7 @@ becomes:
 }
 ```
 
-No absolute filesystem paths are written into generated asset JSON. If the selected shape path is outside `assets/<domain>/shapes`, the dialog warns and requires a manual shape base override.
+No absolute filesystem paths are written into generated asset JSON. Shape base fields also reject Windows backslashes, `..` path traversal, and `assets/<domain>/shapes` filesystem-style prefixes. If the selected shape path is outside `assets/<domain>/shapes`, the dialog reports a blocking validation error before writing.
 
 ## Interaction Boxes
 
@@ -134,6 +134,8 @@ The asset JSON save dialog suggests:
 - items: `assets/<domain>/itemtypes/<code>.json`
 
 Existing files and configured vanilla game-asset paths require explicit confirmation before writing.
+
+Asset save targets are validated before writing: block assets must be under `assets/<domain>/blocktypes`, item assets must be under `assets/<domain>/itemtypes`, and generated lang files must be under `assets/<domain>/lang`.
 
 ## Variants
 
@@ -187,6 +189,24 @@ Generated output:
 
 Placeholders such as `{color}`, `{type}`, and `{metal}` are preserved for Vintage Story to resolve by variant state.
 
+Texture bases are validated as Vintage Story asset base paths and resolve under `assets/<domain>/textures`. They are not shape paths, even when the base string looks similar to a shape base.
+
+Asset-context sessions can also use the Texture Manager panel to relink missing texture aliases, copy texture files into the workspace, and convert workspace files to Vintage Story asset-base paths. Relinking a shape default creates an item/block `textures` override; relinking an inherited `texturesByType` fallback creates an exact selected-variant override unless the shared rule is explicitly selected.
+
+## Shape Alternatives
+
+The direct `shape` field can include Vintage Story `shape.alternates` entries for item-state visuals such as bow charge states. Save As Asset accepts one alternate base per line, and asset-context sessions expose them in the Shape Alternatives panel.
+
+The panel can:
+
+- list resolved alternates for the selected variant
+- open an alternate shape JSON
+- create a new alternate shape file from the current model
+- add the new alternate to the owning item/block asset
+- warn when an alternate base does not resolve under `assets/<domain>/shapes`
+
+When an alternate shape is opened, normal shape save/export targets that alternate shape file instead of the main shape.
+
 ## Optional Fields
 
 Supported starter fields:
@@ -220,14 +240,15 @@ Starter presets can turn on verified groups of fields without requiring users to
 
 - Decorative Block
 - Decorative Item
-- Shelfable / Display Case Item
-- Tool Rack Item
+- Shelfable Item
+- Display Case Item
+- Rackable / Tool Rack Item
 - Ground Storable Item
 - Antler Mount Item
-- Attachable Entity Item
+- Firepit Item
 - Simple Tool
 - Simple Weapon
-- Forge / Firepit Item
+- Attachable Entity Item
 
 Presets only generate source-backed fields. Advanced behavior details can be supplied in the behavior JSON or advanced extras fields.
 Preset behavior, patching rules, and validation are documented in `docs/VINTAGE_STORY_ASSET_PRESETS.md`.
@@ -287,6 +308,7 @@ The workflow can include current Display editor transforms in the asset JSON. Ea
 Root-owned transform fields:
 
 - `guiTransform`
+- `fpHandTransform`
 - `tpHandTransform`
 - `tpOffHandTransform`
 - `groundTransform`
@@ -305,6 +327,7 @@ Attribute-owned transform fields:
 - `attributes.inForgeTransform`
 - `attributes.onOmokTransform`
 - `attributes.infirepitTransform`
+- `attributes.inFirePitProps.transform`
 
 Without variants, transforms can be written as direct fields:
 
@@ -342,7 +365,21 @@ Attribute-owned transforms are written under `attributes`, for example:
 }
 ```
 
-First-person preview modes share `tpHandTransform` and `tpOffHandTransform`; the generator does not emit fake `fpHandTransform` fields.
+Nested attribute-owned transforms keep their surrounding property object intact, for example:
+
+```json
+{
+	"attributes": {
+		"inFirePitPropsByType": {
+			"*": {
+				"transform": {"scale": 0.9}
+			}
+		}
+	}
+}
+```
+
+First-person main hand writes the real root `fpHandTransform` or `fpHandTransformByType` key. First-person offhand remains an editor alias for `fpHandTransform` because Vintage Story does not expose a separate first-person offhand JSON key in the inspected sources.
 
 ## Flowerpot Example
 
@@ -383,7 +420,7 @@ Output:
 - One current shape is saved and referenced. Variant-specific shape files are a later pass.
 - Complex behavior authoring has an advanced JSON list, but not dedicated per-behavior forms.
 - Complex `creativeinventoryStacks` generation is not included.
-- Texture picking is path-based; unresolved texture aliases need manual base paths.
+- Texture picking is path-based; unresolved aliases can be relinked or copied into the workspace with the Texture Manager.
 - The output is normalized JSON, not formatting-preserving relaxed JSON.
-- Visual collision/selection box editing is handled by the Interaction Boxes panel. Drag handles are still planned; numeric editing and overlays are active.
-- Shape alternates can be listed for the direct `shape` field, but there is no multi-shape picker yet.
+- Visual collision/selection box editing is handled by the Interaction Boxes panel with numeric fields, overlays, and selected-box drag handles.
+- Shape alternates are listed/opened/created, but there is no full item-state animation timeline yet.

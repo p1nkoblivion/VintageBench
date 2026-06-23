@@ -6,6 +6,7 @@ import { parseVintageStoryAssetText } from "./vintage_story_asset_parser";
 
 export const VS_PREVIEW_ASSETS = [
 	{id: 'seraph', label: 'Seraph', path: 'assets/game/shapes/entity/humanoid/seraph.json'},
+	{id: 'attachment_slots', label: 'Attachment slots', path: 'assets/game/shapes/entity/humanoid/seraph.json', attachmentSlotPreview: true},
 	{id: 'vs_armor_stand', label: 'Vintage Story armor stand', path: 'assets/survival/entities/nonliving/mannequin.json'},
 	{id: 'mannequin', label: 'Mannequin', path: 'assets/survival/blocktypes/wood/mannequin.json', variantDefaults: {part: 'complete'}},
 	{id: 'tongs', label: 'Tongs', path: 'assets/survival/shapes/entity/humanoid/villageraccessories/held/tongsl.json'},
@@ -34,11 +35,38 @@ export function getVintageStoryAssetRoot() {
 	return settings?.vintage_story_assets_path?.value || '';
 }
 
-export function resolveVintageStoryPreviewAsset(asset_id) {
+function getPreviewAssetCandidateRelativePaths(asset) {
+	return (Array.isArray(asset?.paths) && asset.paths.length)
+		? asset.paths
+		: (asset?.path ? [asset.path] : []);
+}
+
+function isPathInsideRoot(root, candidate) {
+	if (!root || !candidate) return false;
+	let resolved_root = PathModule.resolve(root);
+	let resolved_candidate = PathModule.resolve(candidate);
+	return resolved_candidate === resolved_root || resolved_candidate.startsWith(resolved_root + PathModule.sep);
+}
+
+export function getVintageStoryPreviewAssetCandidates(asset_id) {
 	let asset = VS_PREVIEW_ASSETS.find(entry => entry.id === asset_id);
 	let root = getVintageStoryAssetRoot();
-	if (!asset || !root) return null;
-	return PathModule.join(root, ...asset.path.split('/'));
+	if (!asset || !root) return [];
+	return getPreviewAssetCandidateRelativePaths(asset)
+		.map(relative_path => {
+			let path = PathModule.join(root, ...String(relative_path).split('/'));
+			return {
+				path,
+				relative_path,
+				exists: isPathInsideRoot(root, path) && fs.existsSync(path)
+			};
+		})
+		.filter(candidate => isPathInsideRoot(root, candidate.path));
+}
+
+export function resolveVintageStoryPreviewAsset(asset_id) {
+	let candidates = getVintageStoryPreviewAssetCandidates(asset_id);
+	return candidates.find(candidate => candidate.exists)?.path || candidates[0]?.path || null;
 }
 
 function getPreviewAsset(asset_id) {
@@ -288,9 +316,11 @@ export function loadVintageStoryPreviewModel(asset_id) {
 	}
 
 	let warnings = [];
-	let source_path = resolveVintageStoryPreviewAsset(asset_id);
-	if (!source_path || !fs.existsSync(source_path)) {
-		let result = {asset_id, warnings: [`Missing Vintage Story preview asset: ${asset.label}`]};
+	let candidates = getVintageStoryPreviewAssetCandidates(asset_id);
+	let selected_candidate = candidates.find(candidate => candidate.exists) || candidates[0];
+	let source_path = selected_candidate?.path || null;
+	if (!source_path || !selected_candidate?.exists) {
+		let result = {asset_id, source_path, candidate_paths: candidates.map(candidate => candidate.path), warnings: [`Missing Vintage Story preview asset: ${asset.label}`]};
 		loaded_preview_asset_cache.set(cache_key, result);
 		return result;
 	}
@@ -309,6 +339,7 @@ export function loadVintageStoryPreviewModel(asset_id) {
 		let result = {
 			asset_id,
 			source_path,
+			candidate_paths: candidates.map(candidate => candidate.path),
 			shape_path: resolved_shape.shape_path,
 			texture_path,
 			texture_paths: texture_files.texture_paths,
@@ -324,7 +355,8 @@ export function loadVintageStoryPreviewModel(asset_id) {
 					resolved_shape.shape.textureHeight || 16
 				],
 				texture_sizes: resolved_shape.shape.textureSizes || {},
-				material_color: 0x6e675a
+				material_color: 0x6e675a,
+				attachment_slot_preview: !!asset.attachmentSlotPreview
 			}
 		};
 		loaded_preview_asset_cache.set(cache_key, result);
@@ -348,12 +380,14 @@ export function warnAboutVintageStoryPreviewAssetLoad(asset_id, result) {
 export function getVintageStoryPreviewAssetStatus(asset_ids = VS_PREVIEW_ASSETS.map(asset => asset.id)) {
 	return asset_ids.filter(id => VS_PREVIEW_ASSETS.some(entry => entry.id === id)).map(id => {
 		let asset = getPreviewAsset(id);
-		let resolved = resolveVintageStoryPreviewAsset(id);
+		let candidates = getVintageStoryPreviewAssetCandidates(id);
+		let resolved = candidates.find(candidate => candidate.exists)?.path || candidates[0]?.path || null;
 		return {
 			id,
 			label: asset?.label || id,
 			path: resolved,
-			exists: !!(resolved && fs.existsSync(resolved))
+			candidates,
+			exists: !!candidates.find(candidate => candidate.exists)
 		};
 	});
 }

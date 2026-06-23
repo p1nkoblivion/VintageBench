@@ -5,7 +5,7 @@ Vintage Story item and block assets can define alternate shapes for entity attac
 ## Files Inspected
 
 - `js/vintagestory/vs_asset_resolver.js`: selected variant context, asset root shape resolution, and runtime resolved object generation.
-- `js/vintagestory/vs_variant_resolver.js`: source-order ByType matching, wildcard matching, placeholder substitution, and runtime ByType object expansion.
+- `js/vintagestory/vs_variant_resolver.js`: exact-first and specificity-ranked ByType matching, wildcard matching, placeholder substitution, source pointers, and runtime ByType object expansion.
 - `js/vintagestory/vs_asset_workflow.js`: asset open, session metadata, and asset JSON writeback after shape save.
 - `js/vintagestory/vs_asset_generator.js`: Save As Asset JSON generation and validation.
 - `js/vintagestory/vs_interaction_boxes.js`: source-pointer and inherited-edit pattern reused for attachments.
@@ -29,7 +29,7 @@ Unknown fields inside `attachableToEntity` and slot entries are preserved in the
 
 ## Resolution
 
-Vintage Bench resolves the selected variant first. Attachment data is then resolved using the same source-order ByType behavior used elsewhere in Vintage Story asset context:
+Vintage Bench resolves the selected variant first. Attachment data is then resolved using the same exact-first, specificity-ranked ByType behavior used elsewhere in Vintage Story asset context:
 
 1. Start with `attributes.attachableToEntity`, if present.
 2. Overlay `attributes.attachableToEntityByType` when a key matches the selected variant.
@@ -66,6 +66,8 @@ assets/<domain>/shapes/item/wearable/hooved/elk/weaponr-falx.json
 ```
 
 Domain prefixes are respected. Missing attached shapes warn but do not crash.
+
+Attached shape refs must remain Vintage Story shape base paths. Absolute filesystem paths, Windows backslashes, `..` traversal, and `assets/<domain>/shapes` filesystem-style prefixes are rejected or warned before writeback/export.
 
 ## Entity Attachments Panel
 
@@ -159,7 +161,7 @@ Warnings are added for:
 
 ## Limitations
 
-- Attached shape preview is standalone through the normal viewport; no bundled entity rig is included.
+- Attached shape preview is standalone through the normal viewport. Display mode can show attachment-slot markers on a locally resolved Seraph reference, but no bundled entity rig is included and attached shapes are not posed onto that rig yet.
 - Drag handles are intentionally out of scope for this pass.
 - Unknown attachment fields are preserved but not all are edited through dedicated controls.
 - The panel edits one resolved attachment context for the selected variant at a time.

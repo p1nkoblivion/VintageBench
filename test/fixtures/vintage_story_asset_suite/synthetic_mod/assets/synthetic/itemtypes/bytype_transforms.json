@@ -30,4 +30,16 @@
       scale: 1,
     },
   },
+  fpHandTransformByType: {
+    "*": {
+      translation: { x: 1, y: 2, z: 3 },
+      scale: 1.4,
+    },
+  },
+  toolrackTransformByType: {
+    "*": {
+      translation: { x: 3, y: 2, z: 1 },
+      scale: 0.55,
+    },
+  },
 }

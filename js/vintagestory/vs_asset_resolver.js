@@ -1,6 +1,7 @@
 import {
 	assetLocationMatch,
 	cloneJSON,
+	collectResolvedByTypeSources,
 	deepMergeObjects,
 	expandVintageStoryVariants,
 	fillPlaceholdersDeep,
@@ -12,12 +13,15 @@ import {
 import { parseVintageStoryAssetText } from './vs_asset_document.js';
 import { resolveVintageStoryInteractionBoxes } from './vs_interaction_boxes.js';
 import { resolveVintageStoryAttachments } from './vs_entity_attachments.js';
+import { validateVintageStoryAssetBasePath } from './vs_asset_path_safety.js';
 
 export const VS_ASSET_TRANSFORM_FAMILIES = [
 	{id: 'guiTransform', jsonKey: 'guiTransform', location: 'root'},
 	{id: 'groundTransform', jsonKey: 'groundTransform', location: 'root'},
+	{id: 'fpHandTransform', jsonKey: 'fpHandTransform', location: 'root'},
 	{id: 'tpHandTransform', jsonKey: 'tpHandTransform', location: 'root'},
 	{id: 'tpOffHandTransform', jsonKey: 'tpOffHandTransform', location: 'root'},
+	{id: 'toolrackTransform', jsonKey: 'toolrackTransform', location: 'root'},
 	{id: 'toolrackTransform', jsonKey: 'toolrackTransform', location: 'attributes'},
 	{id: 'groundStorageTransform', jsonKey: 'groundStorageTransform', location: 'attributes'},
 	{id: 'onAntlerMountTransform', jsonKey: 'onAntlerMountTransform', location: 'attributes'},
@@ -29,7 +33,8 @@ export const VS_ASSET_TRANSFORM_FAMILIES = [
 	{id: 'inTrapTransform', jsonKey: 'inTrapTransform', location: 'attributes'},
 	{id: 'inForgeTransform', jsonKey: 'inForgeTransform', location: 'attributes'},
 	{id: 'onOmokTransform', jsonKey: 'onOmokTransform', location: 'attributes'},
-	{id: 'infirepitTransform', jsonKey: 'infirepitTransform', location: 'attributes'}
+	{id: 'infirepitTransform', jsonKey: 'infirepitTransform', location: 'attributes'},
+	{id: 'inFirePitPropsTransform', jsonKey: 'inFirePitProps', mapKey: 'inFirePitPropsByType', location: 'attributes', valuePath: ['transform']}
 ];
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg'];
@@ -108,12 +113,33 @@ export function resolveAssetBasePath(roots, fallback_domain, folder, base, exten
 	let path_module = adapters.PathModule;
 	let raw_base = typeof base === 'string' ? base : normalizeCompositeBase(base);
 	if (!raw_base) return {resolvedFilePath: '', missing: true};
-	let {domain, path} = splitDomainPath(raw_base, fallback_domain);
+	let base_validation = validateVintageStoryAssetBasePath(raw_base, {
+		label: `${folder} asset base`,
+		extensions,
+		fallbackDomain: fallback_domain
+	});
+	if (!base_validation.ok) {
+		return {resolvedFilePath: '', missing: true, invalid: true, error: base_validation.errors.join(' '), domain: '', path: ''};
+	}
+	let {domain, path} = splitDomainPath(base_validation.base, fallback_domain);
 	path = stripKnownPrefix(path, folder);
+	let path_validation = validateVintageStoryAssetBasePath(path, {
+		label: `${folder} asset path`,
+		extensions,
+		allowEmpty: false
+	});
+	if (!path_validation.ok) {
+		return {resolvedFilePath: '', missing: true, invalid: true, error: path_validation.errors.join(' '), domain, path};
+	}
+	path = path_validation.path;
 	for (let root of normalizeAssetRoots(roots)) {
 		for (let extension of extensions) {
 			let clean_path = path.replace(new RegExp(`${extension.replace('.', '\\.')}$`, 'i'), '');
-			let candidate = pathJoin(path_module, root, 'assets', domain, folder, ...clean_path.split('/')) + extension;
+			let folder_root = pathJoin(path_module, root, 'assets', domain, folder);
+			let candidate = pathJoin(path_module, folder_root, ...clean_path.split('/')) + extension;
+			if (!isPathUnderRoot(candidate, folder_root)) {
+				return {resolvedFilePath: '', missing: true, invalid: true, error: `${folder} asset path escapes assets/${domain}/${folder}.`, domain, path: clean_path};
+			}
 			if (!fs || fs.existsSync(candidate)) {
 				return {resolvedFilePath: candidate, missing: fs ? !fs.existsSync(candidate) : false, domain, path: clean_path};
 			}
@@ -121,7 +147,11 @@ export function resolveAssetBasePath(roots, fallback_domain, folder, base, exten
 	}
 	let first_root = normalizeAssetRoots(roots)[0] || '';
 	let clean_path = path.replace(/\.[a-z0-9]+$/i, '');
-	let candidate = first_root ? pathJoin(path_module, first_root, 'assets', domain, folder, ...clean_path.split('/')) + extensions[0] : '';
+	let folder_root = first_root ? pathJoin(path_module, first_root, 'assets', domain, folder) : '';
+	let candidate = folder_root ? pathJoin(path_module, folder_root, ...clean_path.split('/')) + extensions[0] : '';
+	if (candidate && !isPathUnderRoot(candidate, folder_root)) {
+		return {resolvedFilePath: '', missing: true, invalid: true, error: `${folder} asset path escapes assets/${domain}/${folder}.`, domain, path: clean_path};
+	}
 	return {resolvedFilePath: candidate, missing: true, domain, path: clean_path};
 }
 
@@ -134,6 +164,13 @@ export function normalizeCompositeBase(entry) {
 	return '';
 }
 
+function collectShapeAlternates(shape_ref) {
+	let alternates = Array.isArray(shape_ref?.alternates)
+		? shape_ref.alternates
+		: (Array.isArray(shape_ref?.Alternates) ? shape_ref.Alternates : []);
+	return alternates;
+}
+
 function getDirectAtPath(object, path) {
 	let current = object;
 	for (let part of path) {
@@ -141,6 +178,24 @@ function getDirectAtPath(object, path) {
 		current = current[part];
 	}
 	return current;
+}
+
+function setDirectAtPath(object, path = [], value) {
+	if (!path.length) return;
+	let parent = getOrCreateContainer(object, path.slice(0, -1));
+	parent[path[path.length - 1]] = cloneJSON(value);
+}
+
+function deleteDirectAtPath(object, path = []) {
+	if (!path.length) return false;
+	let parent = getDirectAtPath(object, path.slice(0, -1));
+	if (!isPlainObject(parent) && !Array.isArray(parent)) return false;
+	delete parent[path[path.length - 1]];
+	return true;
+}
+
+function hasObjectKeys(value) {
+	return isPlainObject(value) && Object.keys(value).length > 0;
 }
 
 function makePathString(path) {
@@ -155,6 +210,12 @@ function makePathString(path) {
 		}
 	});
 	return output;
+}
+
+function appendPathPart(base, part) {
+	if (typeof part === 'number') return `${base}[${part}]`;
+	if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(String(part))) return `${base}.${part}`;
+	return `${base}[${JSON.stringify(part)}]`;
 }
 
 function resolveMapAtPath(asset_object, map_path, direct_path, variant, warnings) {
@@ -212,20 +273,64 @@ export function resolveVintageStoryShapeReference(asset_object, variant, roots, 
 	}
 	let base = normalizeCompositeBase(resolved.value);
 	let path_resolution = resolveAssetBasePath(roots, fallback_domain, 'shapes', base, ['.json'], adapters);
-	if (path_resolution.missing) {
+	if (path_resolution.invalid) {
+		addWarning(warnings, `Invalid shape path for ${variant.variantCode}: ${base} (${path_resolution.error})`);
+	} else if (path_resolution.missing) {
 		addWarning(warnings, `Missing shape for ${variant.variantCode}: ${base}`);
 	}
-	return {
-		sourceMapPath: resolved.sourceMapPath,
-		sourcePath: resolved.sourcePath,
+	let sourcePath = resolved.sourcePath;
+	let sourceMapPath = resolved.sourceMapPath;
+	let shape_source = {
+		sourceMapPath,
+		sourcePath,
 		matchedPattern: resolved.matchedPattern,
 		rawRef: cloneJSON(resolved.value),
 		resolvedBase: base,
 		resolvedFilePath: path_resolution.resolvedFilePath,
+		invalid: !!path_resolution.invalid,
+		error: path_resolution.error || '',
 		missing: path_resolution.missing,
 		exact: resolved.exact,
 		inherited: resolved.inherited,
-		fallback: resolved.fallback
+		fallback: resolved.fallback,
+		isByType: !!resolved.isByType,
+		selectedVariantKey: variant.variantCode,
+		editTargetKey: resolved.isByType && resolved.exact ? resolved.matchedPattern : null
+	};
+	let alternates = collectShapeAlternates(resolved.value).map((raw_ref, index) => {
+		let alternate_base = normalizeCompositeBase(raw_ref);
+		let alternate_resolution = alternate_base
+			? resolveAssetBasePath(roots, fallback_domain, 'shapes', alternate_base, ['.json'], adapters)
+			: {resolvedFilePath: '', missing: true};
+		let alternate_source_path = `${sourcePath}.alternates[${index}]`;
+		if (alternate_base && alternate_resolution.invalid) {
+			addWarning(warnings, `Invalid alternate shape path for ${variant.variantCode}: ${alternate_base} (${alternate_resolution.error})`);
+		} else if (alternate_base && alternate_resolution.missing) {
+			addWarning(warnings, `Missing alternate shape for ${variant.variantCode}: ${alternate_base}`);
+		}
+		return {
+			index,
+			sourceMapPath,
+			sourcePath: alternate_source_path,
+			matchedPattern: resolved.matchedPattern,
+			rawRef: cloneJSON(raw_ref),
+			resolvedBase: alternate_base,
+			resolvedShapeFilePath: alternate_resolution.resolvedFilePath,
+			resolvedFilePath: alternate_resolution.resolvedFilePath,
+			invalid: !!(alternate_base && alternate_resolution.invalid),
+			error: alternate_resolution.error || '',
+			missing: !alternate_base || !!alternate_resolution.missing,
+			exact: resolved.exact,
+			inherited: resolved.inherited,
+			fallback: resolved.fallback,
+			isByType: !!resolved.isByType,
+			selectedVariantKey: variant.variantCode,
+			shapeSourcePointer: cloneJSON(shape_source)
+		};
+	});
+	return {
+		...shape_source,
+		alternates
 	};
 }
 
@@ -263,36 +368,69 @@ export function resolveVintageStoryTextureAliases(asset_object, shape, variant, 
 	let fallback_domain = getVintageStoryAssetDomain(source_file_path, variant.codeDomain || 'game');
 	let shape_domain = getVintageStoryAssetDomain(shape_file_path, fallback_domain);
 	let shape_textures = isPlainObject(shape?.textures) ? shape.textures : {};
-	let used_aliases = collectUsedFaceTextureRefs(shape?.elements);
+	let used_face_aliases = collectUsedFaceTextureRefs(shape?.elements);
+	let used_aliases = new Set(used_face_aliases);
 	Object.keys(shape_textures).forEach(alias => used_aliases.add(alias));
 	let texture_map = resolveTextureMap(asset_object, variant);
 	Object.keys(texture_map.value || {}).forEach(alias => used_aliases.add(alias));
 	let aliases = {};
 	used_aliases.forEach(alias => {
 		let has_asset = isPlainObject(texture_map.value) && Object.prototype.hasOwnProperty.call(texture_map.value, alias);
+		let has_shape = Object.prototype.hasOwnProperty.call(shape_textures, alias);
 		let has_match_alias = has_asset && texture_map.matchKeys.has(alias);
 		let has_direct_alias = has_asset && texture_map.directKeys.has(alias);
 		let raw = has_asset ? texture_map.value[alias] : shape_textures[alias];
-		let sourceMapPath = has_asset
+		let missing_alias = used_face_aliases.has(alias) && !has_asset && !has_shape;
+		let sourceMapPath = missing_alias
+			? ''
+			: has_asset
 			? (has_match_alias ? 'root.texturesByType' : 'root.textures')
 			: 'shape.textures';
 		let matchedPattern = has_match_alias && texture_map.match ? texture_map.match.matchedPattern : null;
+		let sourcePath = missing_alias
+			? ''
+			: has_asset
+			? (has_match_alias
+				? appendPathPart(`${sourceMapPath}[${JSON.stringify(matchedPattern)}]`, alias)
+				: makePathString(['textures', alias]))
+			: appendPathPart('shape.textures', alias);
 		let resolvedBase = normalizeCompositeBase(raw);
 		let resolved = resolvedBase
 			? resolveAssetBasePath(roots, has_asset ? fallback_domain : shape_domain, 'textures', resolvedBase, IMAGE_EXTENSIONS, adapters)
 			: {resolvedFilePath: '', missing: true};
-		if (resolvedBase && resolved.missing) {
+		if (missing_alias) {
+			addWarning(warnings, `Missing texture alias for ${variant.variantCode}: "${alias}" is used by the shape but not defined in shape textures, root.textures, or root.texturesByType.`);
+		} else if (resolvedBase && resolved.invalid) {
+			addWarning(warnings, `Invalid texture path for ${variant.variantCode} alias "${alias}": ${resolvedBase} (${resolved.error})`);
+		} else if (resolvedBase && resolved.missing) {
 			addWarning(warnings, `Missing texture for ${variant.variantCode} alias "${alias}": ${resolvedBase}`);
 		}
+		let sourceKind = missing_alias
+			? 'missing'
+			: has_asset
+				? (has_match_alias ? 'texturesByType' : 'textures')
+				: 'shape.textures';
 		aliases[alias] = {
+			alias,
+			sourceKind,
 			sourceMapPath,
+			sourcePath,
 			matchedPattern,
 			rawRef: cloneJSON(raw),
 			resolvedBase,
 			resolvedFilePath: resolved.resolvedFilePath,
-			missing: !!(resolvedBase && resolved.missing),
+			invalid: !!(!missing_alias && resolvedBase && resolved.invalid),
+			error: resolved.error || '',
+			missing: missing_alias || !!(resolvedBase && resolved.missing),
 			exact: has_match_alias && texture_map.match ? texture_map.match.exact : has_asset,
-			inherited: has_match_alias && texture_map.match ? texture_map.match.inherited : false
+			inherited: has_match_alias && texture_map.match ? texture_map.match.inherited : false,
+			fallback: has_match_alias && texture_map.match ? texture_map.match.fallback : false,
+			isByType: !!has_match_alias,
+			isAssetOverride: !!has_asset,
+			isShapeAlias: !!has_shape,
+			direct: !!has_direct_alias,
+			selectedVariantKey: variant.variantCode,
+			editTargetKey: has_match_alias && texture_map.match?.exact ? texture_map.match.matchedPattern : null
 		};
 	});
 	return {aliases};
@@ -301,18 +439,62 @@ export function resolveVintageStoryTextureAliases(asset_object, shape, variant, 
 function resolveTransformFamily(asset_object, family, variant) {
 	let container = family.location === 'attributes' ? asset_object?.attributes : asset_object;
 	let container_path = family.location === 'attributes' ? ['attributes'] : [];
-	let map_key = `${family.jsonKey}ByType`;
-	let bytype = resolveMapAtPath(container, [map_key], [family.jsonKey], variant);
+	let map_key = family.mapKey || `${family.jsonKey}ByType`;
+	let value_path = Array.isArray(family.valuePath) ? family.valuePath : [];
+	let bytype = null;
+	if (value_path.length) {
+		let map = getDirectAtPath(container, [map_key]);
+		let direct = getDirectAtPath(container, [family.jsonKey]);
+		let direct_value = getDirectAtPath(direct, value_path);
+		let match = resolveByTypeMap(map, variant.codePath);
+		let match_value = match ? getDirectAtPath(match.value, value_path) : undefined;
+		if (match && match_value !== undefined) {
+			let merged_value = isPlainObject(direct_value) && isPlainObject(match_value)
+				? deepMergeObjects(direct_value, match_value)
+				: match_value;
+			bytype = {
+				value: fillPlaceholdersDeep(merged_value, variant.states),
+				sourceMapPath: makePathString([map_key]),
+				sourcePath: `${makePathString([map_key])}[${JSON.stringify(match.matchedPattern)}]${value_path.map(part => appendPathPart('', part)).join('')}`,
+				matchedPattern: match.matchedPattern,
+				exact: match.exact,
+				fallback: match.fallback,
+				inherited: match.inherited,
+				sourceIndex: match.sourceIndex,
+				isByType: true
+			};
+		} else if (direct_value !== undefined) {
+			bytype = {
+				value: fillPlaceholdersDeep(cloneJSON(direct_value), variant.states),
+				sourceMapPath: makePathString([family.jsonKey].concat(value_path)),
+				sourcePath: makePathString([family.jsonKey].concat(value_path)),
+				matchedPattern: null,
+				exact: true,
+				fallback: false,
+				inherited: false,
+				sourceIndex: -1,
+				isByType: false
+			};
+		}
+	} else {
+		bytype = resolveMapAtPath(container, [map_key], [family.jsonKey], variant);
+	}
 	if (!bytype) return null;
 	let base_path = container_path.concat(bytype.isByType ? [map_key] : [family.jsonKey]);
+	let source_path = bytype.isByType
+		? `${makePathString(base_path)}[${JSON.stringify(bytype.matchedPattern)}]`
+		: makePathString(base_path);
+	if (value_path.length) {
+		source_path += bytype.isByType ? value_path.map(part => appendPathPart('', part)).join('') : value_path.map(part => appendPathPart('', part)).join('');
+	}
 	return {
 		value: cloneJSON(bytype.value),
-		sourcePath: bytype.isByType
-			? `${makePathString(base_path)}[${JSON.stringify(bytype.matchedPattern)}]`
-			: makePathString(base_path),
+		sourcePath: source_path,
 		sourceMapPath: makePathString(base_path),
 		familyPath: base_path,
+		valuePath: value_path,
 		jsonKey: family.jsonKey,
+		mapKey: map_key,
 		location: family.location,
 		matchedPattern: bytype.matchedPattern,
 		inherited: bytype.inherited,
@@ -378,6 +560,7 @@ export function resolveVintageStoryAssetVariant(asset_document, asset_index, var
 		transforms,
 		interactionBoxes,
 		attachments,
+		byTypeSources: collectResolvedByTypeSources(asset_object, variant.codePath),
 		runtimeAssetObject: buildResolvedRuntimeAssetObject(asset_object, variant),
 		warnings
 	};
@@ -409,18 +592,36 @@ export function applyTransformEditToAssetObject(asset_object, source, transform_
 	let parent_path = family_path.slice(0, -1);
 	let key = family_path[family_path.length - 1];
 	let parent = getOrCreateContainer(asset_object, parent_path);
+	let value_path = Array.isArray(source.valuePath) ? source.valuePath : [];
 	if (source.deleteOverride && is_by_type) {
-		if (isPlainObject(parent[key])) delete parent[key][source.selectedVariantKey];
+		if (isPlainObject(parent[key])) {
+			if (value_path.length && isPlainObject(parent[key][source.selectedVariantKey])) {
+				deleteDirectAtPath(parent[key][source.selectedVariantKey], value_path);
+				if (!hasObjectKeys(parent[key][source.selectedVariantKey])) delete parent[key][source.selectedVariantKey];
+			} else {
+				delete parent[key][source.selectedVariantKey];
+			}
+		}
 		return true;
 	}
 	if (is_by_type) {
 		if (!isPlainObject(parent[key])) parent[key] = {};
 		let target_key = source.editTargetKey || (source.exact ? source.matchedPattern : source.selectedVariantKey);
 		if (!target_key) target_key = source.selectedVariantKey;
-		parent[key][target_key] = cloneJSON(transform_value);
+		if (value_path.length) {
+			if (!isPlainObject(parent[key][target_key])) parent[key][target_key] = {};
+			setDirectAtPath(parent[key][target_key], value_path, transform_value);
+		} else {
+			parent[key][target_key] = cloneJSON(transform_value);
+		}
 		return true;
 	}
-	parent[key] = cloneJSON(transform_value);
+	if (value_path.length) {
+		if (!isPlainObject(parent[key])) parent[key] = {};
+		setDirectAtPath(parent[key], value_path, transform_value);
+	} else {
+		parent[key] = cloneJSON(transform_value);
+	}
 	return true;
 }
 

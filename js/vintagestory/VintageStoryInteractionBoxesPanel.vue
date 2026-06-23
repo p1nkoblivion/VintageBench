@@ -10,7 +10,7 @@
 			Interaction boxes are saved on item/block asset files. Use Save As Asset or open a Vintage Story asset to write them back.
 		</div>
 		<div class="vintage_asset_context_notice">
-			Numeric editing and viewport overlays are available. Drag handles are planned.
+			Numeric editing, viewport overlays, and drag handles are available.
 		</div>
 
 		<div class="bar vintage_interaction_box_toolbar vintage_interaction_box_topbar">
@@ -64,19 +64,19 @@
 			<div v-else class="vintage_interaction_box_numeric">
 				<label v-for="coord in coords" :key="coord">
 					<span>{{ coord }}</span>
-					<numeric-input v-model.number="selectedBox.value[coord]" :step="0.0625" @change="markDirty" />
+					<numeric-input v-model.number="selectedBox.value[coord]" :step="0.0625" @focusin.native="startNumericEdit" @mousedown="startNumericEdit" @input="markDirtyLive" @change="finishNumericEdit" />
 				</label>
 				<label>
 					<span>rotateX</span>
-					<numeric-input v-model.number="selectedBox.value.rotateX" :step="1" @change="markDirty" />
+					<numeric-input v-model.number="selectedBox.value.rotateX" :step="1" @focusin.native="startNumericEdit" @mousedown="startNumericEdit" @input="markDirtyLive" @change="finishNumericEdit" />
 				</label>
 				<label>
 					<span>rotateY</span>
-					<numeric-input v-model.number="selectedBox.value.rotateY" :step="1" @change="markDirty" />
+					<numeric-input v-model.number="selectedBox.value.rotateY" :step="1" @focusin.native="startNumericEdit" @mousedown="startNumericEdit" @input="markDirtyLive" @change="finishNumericEdit" />
 				</label>
 				<label>
 					<span>rotateZ</span>
-					<numeric-input v-model.number="selectedBox.value.rotateZ" :step="1" @change="markDirty" />
+					<numeric-input v-model.number="selectedBox.value.rotateZ" :step="1" @focusin.native="startNumericEdit" @mousedown="startNumericEdit" @input="markDirtyLive" @change="finishNumericEdit" />
 				</label>
 			</div>
 		</template>
@@ -158,6 +158,16 @@ export default {
 		},
 		markDirty() {
 			VintageStoryInteractionBoxes.markDirty(this.selectedBox);
+		},
+		startNumericEdit() {
+			VintageStoryInteractionBoxes.beginBoxEdit(this.selectedBox);
+		},
+		markDirtyLive() {
+			VintageStoryInteractionBoxes.updateBoxValueLive(this.selectedBox);
+		},
+		finishNumericEdit() {
+			VintageStoryInteractionBoxes.updateBoxValueLive(this.selectedBox);
+			VintageStoryInteractionBoxes.finishBoxEdit('Edit interaction box numbers');
 		},
 		createOverride() {
 			VintageStoryInteractionBoxes.createOverride(this.selectedBox);

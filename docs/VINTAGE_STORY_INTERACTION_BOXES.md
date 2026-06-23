@@ -12,7 +12,7 @@ The Interaction Boxes panel is a visual editor for these asset-owned boxes. It i
 - `js/vintagestory/vs_asset_workflow.js`: asset-context attachment and asset JSON writeback.
 - `js/vintagestory/vs_variant_resolver.js`: wildcard and variant expansion behavior.
 - `js/vintagestory/vs_asset_generator.js`: Save As Asset output and validation.
-- `js/vintagestory/vs_interaction_box_handles.js`: drag-handle lifecycle extension point.
+- `js/vintagestory/vs_interaction_box_handles.js`: viewport drag handles, hit testing, snapping, and drag undo lifecycle.
 - `js/formats/vintage_story_json.js`: shape save flow and asset writeback hook.
 - `js/display_mode/display_mode.js`: panel registration and viewport object patterns.
 - Installed Vintage Story examples:
@@ -38,6 +38,8 @@ Root block fields:
 - `collisionSelectionBoxByType`
 - `collisionSelectionBoxesByType`
 - lowercase legacy combined-box spellings found in vanilla assets
+- root `rotateY`
+- root `rotateYByType`
 
 Behavior property fields:
 
@@ -66,9 +68,11 @@ Each resolved box stores:
 
 Box coordinates are Vintage Story block-space values, usually `0..1`, not 16-unit shape-space values.
 
+Per-box `rotateX`, `rotateY`, and `rotateZ` are preserved as part of the box value. Root block-level `rotateY` and `rotateYByType` are resolved as shared block rotation metadata and applied to root interaction-box overlays when a box does not define its own `rotateY`.
+
 ## ByType Editing
 
-ByType maps use the existing Vintage Story resolver behavior: first matching wildcard/source-order entry wins.
+ByType maps use the shared resolver behavior: exact keys win first, then more-specific wildcard keys, with source order used only as the deterministic tie-breaker for equally specific patterns.
 
 If a selected variant resolves from an exact ByType key, editing updates that exact key.
 
@@ -109,11 +113,21 @@ The panel provides:
 - Copy Selection To Collision.
 - Numeric editing for `x1`, `y1`, `z1`, `x2`, `y2`, `z2`.
 - Optional numeric `rotateX`, `rotateY`, and `rotateZ`.
+- Selected-box viewport drag handles:
+  - center handle moves the whole box
+  - face handles resize one face
+  - corner handles resize three faces at once
+  - drag values snap to the active Blockbench grid increment
+  - drag edits use the same ByType override/shared-rule prompt as numeric edits
+  - numeric fields update live while handles are dragged
+- Root `rotateY` / `rotateYByType` awareness for block-level box rotation overlays.
 - Create Override, Edit Shared Rule, and Delete Override actions for ByType sources.
 
 Viewport overlays are Three.js line boxes marked `no_export`. They are visual aids only and are not shape elements.
 
-Drag handles are not active yet. `vs_interaction_box_handles.js` now owns selected-box handle state, hit-test stubs, drag lifecycle stubs, and TODOs for raycasting, block-space delta conversion, snapping, and Undo integration. The panel text says numeric editing is active and drag handles are planned.
+Drag handles are Three.js overlay meshes marked `no_export`. They are created only for the selected interaction box and are removed with the overlay.
+
+Dragging uses a camera-facing plane through the clicked handle and converts world-space movement back to Vintage Story block coordinates. Handles edit the asset-owned box value; they never create or mutate shape JSON.
 
 ## Save Behavior
 
@@ -167,6 +181,7 @@ Warnings include:
 - ByType patterns that match no variants
 - exact ByType patterns targeting skipped/disallowed variants
 - wildcard/fallback ByType rules that affect multiple variants
+- malformed or broad `rotateYByType` rules
 - GroundStorable behavior with missing `selectionBox` or `collisionBox`
 - behavior-level panel box whose target behavior is missing
 - interaction box fields found in raw shape JSON
@@ -178,7 +193,7 @@ Warnings do not block editing unless a save workflow separately requires confirm
 
 ## Limitations
 
-- Drag handles are architecture-only in this pass; numeric editing and visual overlays are implemented.
+- Drag handles edit axis-aligned box coordinates. Existing `rotateX`, `rotateY`, `rotateZ`, and root `rotateY` values are preserved and still render in overlays, but drag math edits the unrotated box bounds.
 - Variant object inline fields are not separately edited yet.
 - Behavior boxes are supported when they can be addressed through source pointers. Automatic missing-behavior creation is intentionally limited to verified `GroundStorable` selection/collision boxes.
 - Formatting and comments are not preserved on item/block asset writeback; files are serialized as normalized JSON.

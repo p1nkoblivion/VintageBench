@@ -498,14 +498,27 @@ export class ModelProject {
 			console.error(err);
 		}
 
+		function getVintageStoryDirtyRecords() {
+			let helper = typeof window !== 'undefined' ? (window as any).VintageStoryDirtyState : null;
+			return helper?.collectDirtyRecords?.(Project) || [];
+		}
+
+		function hasUnsavedState() {
+			return !Project.saved || getVintageStoryDirtyRecords().length > 0;
+		}
+
 		async function saveWarning() {
 			return await new Promise((resolve) => {
 				if (isApp && Blockbench.platform == 'win32') {
 					shell.beep();
 				}
+				let vintage_story_dirty = getVintageStoryDirtyRecords();
+				let vintage_story_detail = vintage_story_dirty.length
+					? `\n\nUnsaved Vintage Story linked files:\n${(window as any).VintageStoryDirtyState.formatDirtyRecords(vintage_story_dirty)}`
+					: '';
 				Blockbench.showMessageBox({
 					title: Project.getDisplayName(),
-					message: tl('message.close_warning.message'),
+					message: tl('message.close_warning.message') + vintage_story_detail,
 					buttons: [tl('dialog.save'), tl('dialog.discard'), tl('dialog.cancel')],
 					cancel_on_click_outside: false,
 					width: 472,
@@ -517,7 +530,7 @@ export class ModelProject {
 							await (BarItems.export_over as Action).click();
 						}
 						await new Promise(resolve => setTimeout(resolve, 4));
-						resolve(Project.saved);
+						resolve(!hasUnsavedState());
 					} else if (answer == 1) {
 						resolve(true);
 					} else if (answer == 2) {
@@ -527,7 +540,7 @@ export class ModelProject {
 			});
 		}
 
-		if (force || Project.saved || await saveWarning()) {
+		if (force || !hasUnsavedState() || await saveWarning()) {
 			try {
 				if (isApp) {
 					updateRecentProjectData();

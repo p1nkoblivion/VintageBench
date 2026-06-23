@@ -30,14 +30,19 @@ BARS.defineActions(() => {
 							</div>
 							<p>Version <span>{{ version_label }}</span></p>
 
-							<p>Vintage Story-focused fork cleanup base.</p>
-							<p style="color: var(--color-subtle_text);">This build keeps the desktop cuboid editor while removing user-facing Minecraft, Bedrock, mesh, and hosted web workflows. Proper Vintage Story JSON import/export is still TODO.</p>
+							<p>Vintage Story JSON asset workspace for cuboid model editing.</p>
+							<p style="color: var(--color-subtle_text);">This build opens and saves Vintage Story shape JSON, links item/block asset context, resolves variants and ByType maps, manages textures, display transforms, interaction boxes, attachments, shape alternates, behavior templates, advanced JSON, validation, backups, and mod workspace packaging.</p>
 
 							<h4>FORK NOTICE</h4>
 							<p>Vintage Bench is a modified fork of Blockbench. Original Blockbench copyright notices are retained from the original project and its contributors.</p>
+							<p>Modified-work notice: Vintage Bench changes began on 2026-06-22 and continue through later release commits.</p>
 							<p>Vintage Bench modifications Copyright (C) 2026 P1nkOblivion.</p>
-							<p>Licensed under the GNU General Public License version 3. This program comes with ABSOLUTELY NO WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.</p>
+							<p>Licensed under the GNU General Public License version 3. You may redistribute and modify Vintage Bench under GPL-3.0. See LICENSE.MD in the source tree or installed application files for the full license text.</p>
+							<p>This program comes with ABSOLUTELY NO WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.</p>
 							<p>Source code: <a class="open-in-browser" href="https://github.com/p1nkoblivion/VintageBench">github.com/p1nkoblivion/VintageBench</a></p>
+							<p>No additional EULA or release terms may restrict GPL redistribution, modification, or source-code access rights.</p>
+							<p>User-created models, textures, animations, screenshots, mods, and other assets remain owned by their creators and are not automatically licensed under GPL by using Vintage Bench.</p>
+							<p>No proprietary Vintage Story game assets are bundled. Preview references are placeholders, original calibration backdrops, or loaded from a user-selected local Vintage Story installation at runtime.</p>
 							<p>Vintage Bench is not affiliated with, endorsed by, or sponsored by the original Blockbench project or by the owners or developers of Vintage Story.</p>
 
 							<h4>FRAMEWORKS, LIBRARIES, AND ICONS</h4>

@@ -447,6 +447,8 @@ export const MenuBar = {
 			{name: 'menu.help.search_action', description: BarItems.action_control.description, keybind: BarItems.action_control.keybind, id: 'search_action', icon: 'search', click: ActionControl.select},
 			new MenuSeparator('backups'),
 			'view_backups',
+			'recover_autosaved_projects',
+			'vintage_story_backups',
 			new MenuSeparator('about'),
 			{name: 'menu.help.developer', id: 'developer', icon: 'fas.fa-wrench', children: [
 				'reload_plugins',

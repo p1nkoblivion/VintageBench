@@ -2,6 +2,7 @@
 
 export const VS_DISPLAY_DIRECT_KEYS = [
 	'guiTransform',
+	'fpHandTransform',
 	'tpHandTransform',
 	'tpOffHandTransform',
 	'groundTransform'
@@ -23,10 +24,10 @@ export const VS_DISPLAY_ATTRIBUTE_KEYS = [
 ];
 
 export const VS_DISPLAY_CONTEXTS = [
-	{id: 'tpHandTransform', label: 'Thirdperson Mainhand', section: 'Hands', icon: 'pan_tool', jsonKey: 'tpHandTransform', location: 'root', references: ['seraph', 'mannequin', 'vs_armor_stand']},
-	{id: 'tpOffHandTransform', label: 'Thirdperson Offhand', section: 'Hands', icon: 'pan_tool', jsonKey: 'tpOffHandTransform', location: 'root', references: ['seraph', 'mannequin', 'vs_armor_stand']},
-	{id: 'fpHandTransform', label: 'Firstperson Mainhand', section: 'Hands', icon: 'person', jsonKey: 'tpHandTransform', location: 'root', aliasOf: 'tpHandTransform', references: ['firstperson']},
-	{id: 'fpOffHandTransform', label: 'Firstperson Offhand', section: 'Hands', icon: 'person', jsonKey: 'tpOffHandTransform', location: 'root', aliasOf: 'tpOffHandTransform', references: ['firstperson']},
+	{id: 'tpHandTransform', label: 'Thirdperson Mainhand', section: 'Hands', icon: 'pan_tool', jsonKey: 'tpHandTransform', location: 'root', references: ['seraph', 'attachment_slots', 'mannequin', 'vs_armor_stand']},
+	{id: 'tpOffHandTransform', label: 'Thirdperson Offhand', section: 'Hands', icon: 'pan_tool', jsonKey: 'tpOffHandTransform', location: 'root', references: ['seraph', 'attachment_slots', 'mannequin', 'vs_armor_stand']},
+	{id: 'fpHandTransform', label: 'Firstperson Mainhand', section: 'Hands', icon: 'person', jsonKey: 'fpHandTransform', location: 'root', references: ['firstperson']},
+	{id: 'fpOffHandTransform', label: 'Firstperson Offhand', section: 'Hands', icon: 'person', jsonKey: 'fpHandTransform', location: 'root', aliasOf: 'fpHandTransform', references: ['firstperson']},
 	{id: 'onTongTransform', label: 'On tongs', section: 'Hands', icon: 'construction', jsonKey: 'onTongTransform', location: 'attributes', references: ['tongs']},
 
 	{id: 'groundTransform', label: 'Ground', section: 'Ground', icon: 'public', jsonKey: 'groundTransform', location: 'root', references: ['ground']},
@@ -42,6 +43,7 @@ export const VS_DISPLAY_CONTEXTS = [
 	{id: 'guiTransform', label: 'GUI', section: 'GUI', icon: 'border_style', jsonKey: 'guiTransform', location: 'root', references: ['inventory_full', 'hud', 'backdrop']},
 
 	{id: 'seraphPreviewTransform', label: 'Seraph preview', section: 'Entity / Armor', icon: 'accessibility', previewOnly: true, references: ['seraph']},
+	{id: 'attachmentSlotPreviewTransform', label: 'Attachment slot preview', section: 'Entity / Armor', icon: 'location_searching', previewOnly: true, references: ['attachment_slots']},
 	{id: 'armorStandPreviewTransform', label: 'Armor stand preview', section: 'Entity / Armor', icon: 'accessibility', previewOnly: true, references: ['vs_armor_stand']},
 	{id: 'mannequinPreviewTransform', label: 'Mannequin preview', section: 'Entity / Armor', icon: 'person', previewOnly: true, references: ['mannequin']},
 
@@ -49,6 +51,7 @@ export const VS_DISPLAY_CONTEXTS = [
 	{id: 'inForgeTransform', label: 'In forge', section: 'Other', icon: 'local_fire_department', jsonKey: 'inForgeTransform', location: 'attributes', references: ['forge']},
 	{id: 'onOmokTransform', label: 'On omok tabletop', section: 'Other', icon: 'table_bar', jsonKey: 'onOmokTransform', location: 'attributes', references: ['omok_tabletop']},
 	{id: 'infirepitTransform', label: 'In firepit', section: 'Other', icon: 'whatshot', jsonKey: 'infirepitTransform', location: 'attributes', references: ['firepit']},
+	{id: 'inFirePitPropsTransform', label: 'In firepit props', section: 'Other', icon: 'whatshot', jsonKey: 'inFirePitProps', location: 'attributes', valuePath: ['transform'], references: ['firepit']},
 ];
 
 export const VS_DISPLAY_SECTIONS = ['Hands', 'Ground', 'Shelf / Rack', 'GUI', 'Entity / Armor', 'Other'].map(section => ({
@@ -66,6 +69,48 @@ function isPlainObject(value) {
 function cloneJSON(value) {
 	if (value === undefined) return undefined;
 	return JSON.parse(JSON.stringify(value));
+}
+
+function valueAtPath(root, path = []) {
+	let cursor = root;
+	for (let part of path) {
+		if (cursor === undefined || cursor === null) return undefined;
+		cursor = cursor[part];
+	}
+	return cursor;
+}
+
+function ensureContainerAtPath(root, path = []) {
+	let cursor = root;
+	for (let i = 0; i < path.length; i++) {
+		let part = path[i];
+		let next_part = path[i + 1];
+		if (!isPlainObject(cursor[part]) && !Array.isArray(cursor[part])) {
+			cursor[part] = typeof next_part === 'number' ? [] : {};
+		}
+		cursor = cursor[part];
+	}
+	return cursor;
+}
+
+function setValueAtPath(root, path = [], value) {
+	if (!path.length) return;
+	let parent = ensureContainerAtPath(root, path.slice(0, -1));
+	parent[path[path.length - 1]] = cloneJSON(value);
+}
+
+function getContextTransformValue(container, context) {
+	let value = container?.[context.jsonKey];
+	return context.valuePath?.length ? valueAtPath(value, context.valuePath) : value;
+}
+
+function setContextTransformValue(container, context, transform) {
+	if (context.valuePath?.length) {
+		if (!isPlainObject(container[context.jsonKey])) container[context.jsonKey] = {};
+		setValueAtPath(container[context.jsonKey], context.valuePath, transform);
+	} else {
+		container[context.jsonKey] = cloneJSON(transform);
+	}
 }
 
 function numberOrDefault(value, fallback = 0) {
@@ -217,19 +262,23 @@ export function displaySlotToVintageStoryTransform(slot) {
 export function collectVintageStoryDisplayTransformsFromModel(model, warnings) {
 	let output = {};
 	if (!isPlainObject(model)) return output;
-	VS_DISPLAY_DIRECT_KEYS.forEach(key => {
-		if (isPlainObject(model[key])) {
-			let context = getVintageStoryDisplayContextByJsonKey(key, 'root');
-			if (context) output[context.id] = vintageStoryTransformToDisplaySlot(context.id, model[key], warnings);
-		}
-	});
+	VS_DISPLAY_CONTEXTS
+		.filter(context => context.location === 'root' && !context.previewOnly && !context.aliasOf)
+		.forEach(context => {
+			let value = getContextTransformValue(model, context);
+			if (isPlainObject(value)) {
+				output[context.id] = vintageStoryTransformToDisplaySlot(context.id, value, warnings);
+			}
+		});
 	let attributes = isPlainObject(model.attributes) ? model.attributes : {};
-	VS_DISPLAY_ATTRIBUTE_KEYS.forEach(key => {
-		if (isPlainObject(attributes[key])) {
-			let context = getVintageStoryDisplayContextByJsonKey(key, 'attributes');
-			if (context) output[context.id] = vintageStoryTransformToDisplaySlot(context.id, attributes[key], warnings);
-		}
-	});
+	VS_DISPLAY_CONTEXTS
+		.filter(context => context.location === 'attributes' && !context.previewOnly && !context.aliasOf)
+		.forEach(context => {
+			let value = getContextTransformValue(attributes, context);
+			if (isPlainObject(value)) {
+				output[context.id] = vintageStoryTransformToDisplaySlot(context.id, value, warnings);
+			}
+		});
 	return output;
 }
 
@@ -242,9 +291,9 @@ export function applyVintageStoryDisplayTransformsToModel(model, displaySettings
 		if (!transform) return;
 		if (context.location === 'attributes') {
 			if (!isPlainObject(model.attributes)) model.attributes = {};
-			model.attributes[context.jsonKey] = transform;
+			setContextTransformValue(model.attributes, context, transform);
 		} else {
-			model[context.jsonKey] = transform;
+			setContextTransformValue(model, context, transform);
 		}
 	});
 	return model;

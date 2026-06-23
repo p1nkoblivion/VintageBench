@@ -11,7 +11,7 @@ Presets do not replace the advanced JSON fields. They provide source-backed defa
 - `js/vintagestory/vs_asset_generator.js`: Save As Asset config parsing, generated JSON output, transform output, interaction boxes, attachments, and validation.
 - `js/vintagestory/vs_save_as_asset_workflow.js`: dialog fields, live preview, save order, and file picker behavior.
 - `js/vintagestory/vs_asset_resolver.js`: asset context, source pointers, root/attribute transform writeback, and vanilla asset write warnings.
-- `js/vintagestory/vs_variant_resolver.js`: variant expansion, wildcard matching, and source-order ByType behavior.
+- `js/vintagestory/vs_variant_resolver.js`: variant expansion, wildcard matching, source pointers, and exact-first ByType behavior.
 - `js/display_mode/vintage_story_display_transforms.js`: verified transform context ids and asset JSON field locations.
 - `js/vintagestory/vs_interaction_boxes.js`: verified root and behavior-level box fields.
 - `js/vintagestory/vs_entity_attachments.js`: `attachableToEntity` resolution and writeback.
@@ -94,23 +94,29 @@ Writes:
 
 For variants, transform maps use the existing transform mode. The default is a `*` fallback map.
 
-### Shelfable / Display Case Item
+### Shelfable Item
 
 Asset type: item.
 
-Writes verified attributes:
+Writes:
 
 - `attributes.shelvable`
-- `attributes.displaycaseable`
-
-Writes configured transforms when present:
-
 - `attributes.onshelfTransform` or `attributes.onshelfTransformByType`
+
+More detailed `displayable` shelf fields remain manual because they need extra domain-specific inputs.
+
+### Display Case Item
+
+Asset type: item.
+
+Writes:
+
+- `attributes.displaycaseable`
 - `attributes.onDisplayTransform` or `attributes.onDisplayTransformByType`
 
-More detailed `displayable` and display case sizing fields remain manual because they need extra domain-specific inputs.
+More detailed display case sizing fields remain manual because they need extra domain-specific inputs.
 
-### Tool Rack Item
+### Rackable / Tool Rack Item
 
 Asset type: item.
 
@@ -119,7 +125,7 @@ Writes:
 - `attributes.rackable`
 - `attributes.toolrackTransform` or `attributes.toolrackTransformByType`
 
-When applied to an existing selected variant, the patch uses the selected variant code for the transform key so wildcard/fallback rules are not silently changed.
+Rackable items need a toolrack transform to look correct. When applied to an existing selected variant, the patch uses the selected variant code for the transform key so wildcard/fallback rules are not silently changed.
 
 ### Ground Storable Item
 
@@ -153,23 +159,16 @@ Writes:
 - `attributes.antlerMountable`
 - `attributes.onAntlerMountTransform` or `attributes.onAntlerMountTransformByType`
 
-### Attachable Entity Item
+### Firepit Item
 
 Asset type: item.
 
-Writes one of:
+Writes:
 
-- `attributes.attachableToEntity`
-- `attributesByType["*"].attachableToEntity`
-- `attributesByType["variant"].attachableToEntity`
+- `attributes.inFirePitProps.transform`
+- `attributes.inFirePitPropsByType["variant"].transform` when patching a selected variant
 
-Supported fields:
-
-- `categoryCode`
-- `attachedShapeBySlotCode`
-- slot `base` paths
-
-Absolute filesystem paths are rejected. Slot shape paths must be Vintage Story shape base paths.
+The preset does not invent firepit burn, cook, forge, or temperature fields. Those gameplay fields remain Advanced JSON until their full structures are represented by dedicated controls.
 
 ### Simple Tool
 
@@ -199,13 +198,23 @@ Writes verified blade-style stat fields when values are provided:
 
 The preset does not force blade-specific behavior names, animations, tags, or material rules into every weapon.
 
-### Firepit / Forge Item
+### Attachable Entity Item
 
 Asset type: item.
 
-Status: experimental.
+Writes one of:
 
-The preset only enables verified firepit/forge transform targets in the UI. Complex `inFirePitProps`, `inFirePitPropsByType`, and forge/firepit gameplay fields remain manual until their full structure is represented by dedicated controls.
+- `attributes.attachableToEntity`
+- `attributesByType["*"].attachableToEntity`
+- `attributesByType["variant"].attachableToEntity`
+
+Supported fields:
+
+- `categoryCode`
+- `attachedShapeBySlotCode`
+- slot `base` paths
+
+Absolute filesystem paths are rejected. Slot shape paths must be Vintage Story shape base paths.
 
 ## ByType Behavior
 
@@ -262,7 +271,7 @@ These warnings appear in the existing Save As Asset preview and validation flow.
 
 - Presets cover common starter assets, not every Vintage Story field.
 - Advanced behavior properties remain manual unless their field names and structures are verified.
-- Collision and selection box drag handles are intentionally not part of this pass.
+- Collision and selection box drag handles are handled by the Interaction Boxes panel after the asset is open.
 - No proprietary Vintage Story preview rigs or assets are bundled.
 - Generated type declarations remain ignored and regenerated by the project scripts.
 - Existing asset patching applies one selected preset at a time.

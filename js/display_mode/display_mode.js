@@ -138,6 +138,7 @@ export class DisplaySlot {
 
 const VINTAGE_REFERENCE_BASES = {
 	seraph: [6, 14, -2, -90, 0, 0, 1, 1, 1],
+	attachment_slots: [6, 14, -2, -90, 0, 0, 1, 1, 1],
 	vs_armor_stand: [0, 18, 0, 0, 0, 0, 1, 1, 1],
 	mannequin: [0, 18, 0, 0, 0, 0, 1, 1, 1],
 	firstperson: [0, 24, 20.8, 0, 0, 0, 1, 1, 1],
@@ -175,6 +176,32 @@ const VINTAGE_GUI_REFERENCE_IMAGES = {
 		slot_bounds: [108, 54, 159, 105],
 		slot_units: 16
 	}
+};
+
+const VINTAGE_RIG_FALLBACK_MODEL = {
+	name: 'Missing local rig preview',
+	material_color: 0x6e675a,
+	texture_size: [16, 16],
+	elements: [
+		{name: 'fallback_head', size: [4, 4, 4], pos: [0, 25, 0]},
+		{name: 'fallback_body', size: [5, 9, 3], pos: [0, 18.5, 0]},
+		{name: 'fallback_arm_l', size: [2, 8, 2], pos: [-3.6, 18.2, 0]},
+		{name: 'fallback_arm_r', size: [2, 8, 2], pos: [3.6, 18.2, 0]},
+		{name: 'fallback_leg_l', size: [2, 8, 2], pos: [-1.4, 10.2, 0]},
+		{name: 'fallback_leg_r', size: [2, 8, 2], pos: [1.4, 10.2, 0]}
+	]
+};
+
+const VINTAGE_MANNEQUIN_FALLBACK_MODEL = {
+	name: 'Missing local mannequin preview',
+	material_color: 0x7a715f,
+	texture_size: [16, 16],
+	elements: [
+		{name: 'fallback_base', size: [7, 1.5, 7], pos: [0, 8.75, 0]},
+		{name: 'fallback_post', size: [1.5, 14, 1.5], pos: [0, 16.5, 0]},
+		{name: 'fallback_shoulders', size: [8, 1.5, 2], pos: [0, 22.5, 0]},
+		{name: 'fallback_head', size: [3, 3, 3], pos: [0, 25, 0]}
+	]
 };
 
 const VINTAGE_DISPLAY_SLOT_IDS = Array.from(new Set(VS_DISPLAY_CONTEXTS
@@ -370,16 +397,22 @@ export class refModel {
 		let texture_size = options.texture_size || [shape.textureWidth || 16, shape.textureHeight || 16];
 		let scope = this;
 		let material_cache = {};
+		let attachment_material_cache = {};
 		if (Array.isArray(options.reference_base)) {
 			this.reference_base = options.reference_base;
 		}
 		this.material = this.getMaterial(options);
 
-		function vector(value, fallback = [0, 0, 0]) {
-			return Array.isArray(value) ? value : fallback;
-		}
 		function number(value, fallback = 0) {
-			return typeof value === 'number' && isFinite(value) ? value : fallback;
+			if (typeof value === 'number' && isFinite(value)) return value;
+			if (typeof value === 'string' && value.trim() !== '') {
+				let parsed = Number(value);
+				if (isFinite(parsed)) return parsed;
+			}
+			return fallback;
+		}
+		function vector(value, fallback = [0, 0, 0]) {
+			return Array.isArray(value) ? value.slice(0, 3).map((entry, index) => number(entry, fallback[index] || 0)) : fallback;
 		}
 		function getFaceMaterial(face) {
 			if (!face || face.enabled === false) return scope.getTransparentMaterial();
@@ -398,6 +431,44 @@ export class refModel {
 		function getElementMaterials(faces) {
 			// Modified for Vintage Bench on 2026-06-22: Three BoxGeometry material groups are +X, -X, +Y, -Y, +Z, -Z.
 			return ['east', 'west', 'up', 'down', 'south', 'north'].map(face => getFaceMaterial(faces?.[face]));
+		}
+		function getAttachmentMaterial(key, color) {
+			if (!attachment_material_cache[key]) {
+				attachment_material_cache[key] = new THREE.MeshBasicMaterial({
+					color,
+					transparent: true,
+					opacity: 0.85,
+					depthTest: false
+				});
+			}
+			return attachment_material_cache[key];
+		}
+		function addMarkerBox(parent, name, size, position, material) {
+			let mesh = new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]), material);
+			mesh.name = name;
+			mesh.position.set(position[0], position[1], position[2]);
+			mesh.renderOrder = 20;
+			parent.add(mesh);
+		}
+		function buildAttachmentPointMarkers(points, parent) {
+			if (!options.attachment_slot_preview || !Array.isArray(points)) return;
+			points.forEach(point => {
+				if (!point || typeof point !== 'object') return;
+				let marker = new THREE.Object3D();
+				let code = String(point.code || 'slot');
+				marker.name = `attachment_slot_${code}`;
+				marker.position.set(number(point.posX), number(point.posY), number(point.posZ));
+				marker.rotation.setFromDegreeArray([
+					number(point.rotationX),
+					number(point.rotationY),
+					number(point.rotationZ)
+				]);
+				addMarkerBox(marker, `${marker.name}_center`, [0.7, 0.7, 0.7], [0, 0, 0], getAttachmentMaterial('center', 0x3ec7ff));
+				addMarkerBox(marker, `${marker.name}_x`, [1.8, 0.15, 0.15], [0.9, 0, 0], getAttachmentMaterial('x', 0xff5252));
+				addMarkerBox(marker, `${marker.name}_y`, [0.15, 1.8, 0.15], [0, 0.9, 0], getAttachmentMaterial('y', 0x7bd66f));
+				addMarkerBox(marker, `${marker.name}_z`, [0.15, 0.15, 1.8], [0, 0, 0.9], getAttachmentMaterial('z', 0x4f83ff));
+				parent.add(marker);
+			});
 		}
 		function buildElement(element, parent) {
 			if (/^psurface/i.test(String(element?.name || ''))) return;
@@ -435,6 +506,8 @@ export class refModel {
 				anchor.add(mesh);
 			}
 
+			buildAttachmentPointMarkers(element.attachmentpoints, anchor);
+
 			if (Array.isArray(element.children)) {
 				element.children.forEach(child => buildElement(child, anchor));
 			}
@@ -444,6 +517,7 @@ export class refModel {
 		if (Array.isArray(shape.elements)) {
 			shape.elements.forEach(element => buildElement(element, this.model));
 		}
+		buildAttachmentPointMarkers(shape.attachmentpoints, this.model);
 		this.model.name = options.name || this.name;
 		return this;
 	}
@@ -569,17 +643,22 @@ export const displayReferenceObjects = {
 		seraph: new refModel('seraph', {
 			icon: 'accessibility',
 			asset_id: 'seraph',
-			models: []
+			models: [VINTAGE_RIG_FALLBACK_MODEL]
+		}),
+		attachment_slots: new refModel('attachment_slots', {
+			icon: 'location_searching',
+			asset_id: 'attachment_slots',
+			models: [VINTAGE_RIG_FALLBACK_MODEL]
 		}),
 		vs_armor_stand: new refModel('vs_armor_stand', {
 			icon: 'fa-child',
 			asset_id: 'vs_armor_stand',
-			models: []
+			models: [VINTAGE_RIG_FALLBACK_MODEL]
 		}),
 		mannequin: new refModel('mannequin', {
 			icon: 'fa-person',
 			asset_id: 'mannequin',
-			models: []
+			models: [VINTAGE_MANNEQUIN_FALLBACK_MODEL]
 		}),
 		firstperson: new refModel('firstperson', {
 			icon: 'fa-asterisk',

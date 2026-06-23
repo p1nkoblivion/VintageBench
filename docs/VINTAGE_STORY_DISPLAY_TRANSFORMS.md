@@ -56,6 +56,7 @@ Additional transform keys are stored under collectible/block `attributes`:
 - `inForgeTransform`
 - `onOmokTransform`
 - `infirepitTransform`
+- `inFirePitProps.transform`
 
 `InventoryItemRenderer.cs` confirms GUI, ground, third-person main hand, and third-person offhand render targets. It uses `TpOffHandTransform` for `HandTpOff`, falling back to `TpHandTransform`. `fpHandTransform` exists on collectible/block data, but no separate first-person offhand JSON key was found in the inspected game source.
 
@@ -88,13 +89,15 @@ UI label to JSON mapping:
 | On shelf | `onshelfTransform` | `attributes.onshelfTransform` |
 | On scroll rack | `onscrollrackTransform` | `attributes.onscrollrackTransform` |
 | GUI | `guiTransform` | root `guiTransform` |
-| Seraph preview | `seraphPreviewTransform` | preview-only TODO; no JSON key written |
-| Armor stand preview | `armorStandPreviewTransform` | preview-only TODO; no JSON key written |
-| Mannequin preview | `mannequinPreviewTransform` | preview-only TODO; no JSON key written |
+| Seraph preview | `seraphPreviewTransform` | preview-only local reference; no JSON key written |
+| Attachment slot preview | `attachmentSlotPreviewTransform` | preview-only local reference; no JSON key written |
+| Armor stand preview | `armorStandPreviewTransform` | preview-only local reference; no JSON key written |
+| Mannequin preview | `mannequinPreviewTransform` | preview-only local reference; no JSON key written |
 | In traps | `inTrapTransform` | `attributes.inTrapTransform` |
 | In forge | `inForgeTransform` | `attributes.inForgeTransform` |
 | On omak tabletop | `onOmokTransform` | `attributes.onOmokTransform` |
 | In firepit | `infirepitTransform` | `attributes.infirepitTransform` |
+| In firepit props | `inFirePitPropsTransform` | `attributes.inFirePitProps.transform` |
 
 ## Defaults
 
@@ -109,11 +112,11 @@ The game has block/item default transform methods such as `BlockDefaultGui`, `It
 
 ## Import/Export Behavior
 
-Root transform keys are imported into `Project.display_settings`. Attribute transform keys are imported from `root.attributes`. Unknown fields inside a transform object are preserved on the slot and re-emitted. `scaleXyz` imports as the X value for the uniform UI and is preserved as unsupported non-uniform data.
+Root transform keys are imported into `Project.display_settings`. Attribute transform keys are imported from `root.attributes`, including nested `attributes.inFirePitProps.transform`. Unknown fields inside a transform object are preserved on the slot and re-emitted. `scaleXyz` imports as the X value for the uniform UI and is preserved as unsupported non-uniform data.
 
 Export writes only Vintage Story keys. It does not write Minecraft `display` objects or Blockbench-only display metadata. Preview-only contexts are not exported.
 
-The current implementation uses `js/display_mode/vintage_story_display_transforms.js` as the central mapping module. `fpOffHandTransform` is editor-only and aliases the single game `fpHandTransform` key because no separate first-person offhand key was found in the inspected Vintage Story source.
+The current implementation uses `js/display_mode/vintage_story_display_transforms.js` as the central mapping module. `fpHandTransform` is written as the real root Vintage Story key. `fpOffHandTransform` is editor-only and aliases the single game `fpHandTransform` key because no separate first-person offhand key was found in the inspected Vintage Story source.
 
 ## UI and Preview Behavior
 
@@ -126,7 +129,9 @@ The Display editor exposes:
 
 Changing these fields updates the preview immediately through `DisplayMode.updateDisplayBase`. The transform gizmo also keeps display scale uniform. Reset uses neutral Vintage Story values until exact game defaults are sourced.
 
-Preview references are Vintage Story-named: Seraph, Vintage Story armor stand, mannequin, tongs, ground, shelf/rack holders, GUI, trap, forge, Omok tabletop, and firepit. This pass does not bundle Vintage Story assets. When `vintage_story_assets_path` points at a local Vintage Story installation, preview references load and convert the matching local shape JSON into cuboid preview geometry. Missing assets, unresolved shape indirection, or unresolved textures fall back to placeholders or neutral preview materials with a warning.
+Preview references are Vintage Story-named: Seraph, attachment slots, Vintage Story armor stand, mannequin, tongs, ground, shelf/rack holders, GUI, trap, forge, Omok tabletop, and firepit. This pass does not bundle Vintage Story assets. When `vintage_story_assets_path` points at a local Vintage Story installation, preview references load and convert the matching local shape JSON into cuboid preview geometry. Missing assets, unresolved shape indirection, or unresolved textures fall back to neutral placeholders or neutral preview materials with a warning.
+
+Modified for Vintage Bench on 2026-06-23: the Seraph, armor stand, mannequin, and attachment-slot previews are loaded only from the user-provided Vintage Story asset root. The attachment-slot reference overlays editor-authored marker cuboids on the local Seraph shape's `attachmentpoints`. This is preview-only and does not write transforms, attachment data, or Vintage Story assets into exported JSON.
 
 Modified for Vintage Bench on 2026-06-22: GUI preview references now use `assets/inventory_full.png` and `assets/hud.png` as orthographic backdrops. The highlighted blue slot in each screenshot is calibrated as the `guiTransform` render target:
 

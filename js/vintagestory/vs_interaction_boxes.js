@@ -106,6 +106,8 @@ export const VS_INTERACTION_BOX_BEHAVIOR_FAMILIES = [
 const AXES = ['x', 'y', 'z'];
 const BOX_COORDS = ['x1', 'y1', 'z1', 'x2', 'y2', 'z2'];
 const GROUND_STORABLE_BEHAVIOR_NAME = 'GroundStorable';
+const ROOT_ROTATE_Y_KEYS = ['rotateY', 'rotatey'];
+const ROOT_ROTATE_Y_BYTYPE_KEYS = ['rotateYByType', 'rotateyByType', 'rotateybytype'];
 
 function addWarning(warnings, message) {
 	if (warnings && message && !warnings.includes(message)) warnings.push(message);
@@ -182,6 +184,57 @@ function sourcePathFor(source, array_index = null) {
 	return path;
 }
 
+function normalizeRootRotateYSource(value, source, warnings) {
+	let number = typeof value === 'number' && Number.isFinite(value)
+		? value
+		: (typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN);
+	if (!Number.isFinite(number)) {
+		addWarning(warnings, `${source.sourcePath} must be a numeric rotateY value.`);
+		return null;
+	}
+	return Object.assign({}, source, {value: number});
+}
+
+function resolveRootRotateY(asset_object, variant, warnings) {
+	let by_type_key = findExistingKey(asset_object, ROOT_ROTATE_Y_BYTYPE_KEYS);
+	let direct_key = findExistingKey(asset_object, ROOT_ROTATE_Y_KEYS);
+	let by_type_map = by_type_key ? asset_object[by_type_key] : undefined;
+	let match = resolveByTypeMap(by_type_map, variant.codePath);
+	if (match) {
+		let family_path = [by_type_key];
+		return normalizeRootRotateYSource(fillPlaceholdersDeep(match.value, variant.states), {
+			family: 'rotateY',
+			fieldKey: by_type_key,
+			familyPath: family_path,
+			sourcePath: `${makePathString(family_path)}[${JSON.stringify(match.matchedPattern)}]`,
+			sourceMapPath: makePathString(family_path),
+			isByType: true,
+			matchedPattern: match.matchedPattern,
+			selectedVariantKey: variant.variantCode,
+			exact: match.exact,
+			inherited: match.inherited,
+			fallback: match.fallback
+		}, warnings);
+	}
+	if (direct_key) {
+		let family_path = [direct_key];
+		return normalizeRootRotateYSource(fillPlaceholdersDeep(cloneJSON(asset_object[direct_key]), variant.states), {
+			family: 'rotateY',
+			fieldKey: direct_key,
+			familyPath: family_path,
+			sourcePath: makePathString(family_path),
+			sourceMapPath: makePathString(family_path),
+			isByType: false,
+			matchedPattern: null,
+			selectedVariantKey: variant.variantCode,
+			exact: true,
+			inherited: false,
+			fallback: false
+		}, warnings);
+	}
+	return null;
+}
+
 function normalizeBoxEntries(raw_value, source, warnings) {
 	let values = Array.isArray(raw_value) ? raw_value : [raw_value];
 	return values.map((raw, index) => {
@@ -215,6 +268,7 @@ function normalizeBoxEntries(raw_value, source, warnings) {
 			editTargetKey: source.exact ? source.matchedPattern : null,
 			arrayIndex: array_index,
 			value,
+			assetRotateY: source.assetRotateY ? cloneJSON(source.assetRotateY) : undefined,
 			sourcePath: sourcePathFor(source, array_index),
 			sourceMapPath: makePathString(source.familyPath),
 			sourcePointer: {
@@ -236,6 +290,7 @@ function normalizeBoxEntries(raw_value, source, warnings) {
 				editTargetKey: source.exact ? source.matchedPattern : null,
 				arrayIndex: array_index,
 				overrideBaseValue: Array.isArray(raw_value) ? cloneJSON(raw_value) : undefined,
+				assetRotateY: source.assetRotateY ? cloneJSON(source.assetRotateY) : undefined,
 				sourcePath: sourcePathFor(source, array_index),
 				sourceMapPath: makePathString(source.familyPath)
 			},
@@ -267,7 +322,8 @@ function resolveFamily(container, owner, family, variant, warnings) {
 			selectedVariantKey: variant.variantCode,
 			exact: match.exact,
 			inherited: match.inherited,
-			fallback: match.fallback
+			fallback: match.fallback,
+			assetRotateY: owner.assetRotateY
 		}, warnings);
 	}
 	if (direct_key) {
@@ -288,7 +344,8 @@ function resolveFamily(container, owner, family, variant, warnings) {
 			selectedVariantKey: variant.variantCode,
 			exact: true,
 			inherited: false,
-			fallback: false
+			fallback: false,
+			assetRotateY: owner.assetRotateY
 		}, warnings);
 	}
 	return [];
@@ -297,7 +354,7 @@ function resolveFamily(container, owner, family, variant, warnings) {
 export function resolveVintageStoryInteractionBoxes(asset_object, variant, warnings = []) {
 	let boxes = [];
 	if (!isPlainObject(asset_object) || !variant) return boxes;
-	let root_owner = {kind: 'root', path: []};
+	let root_owner = {kind: 'root', path: [], assetRotateY: resolveRootRotateY(asset_object, variant, warnings)};
 	VS_INTERACTION_BOX_ROOT_FAMILIES.forEach(family => {
 		boxes.push(...resolveFamily(asset_object, root_owner, family, variant, warnings));
 	});
@@ -505,6 +562,16 @@ export function validateVintageStoryInteractionBoxes(boxes = [], options = {}) {
 			if (exact && exact.included === false) addWarning(warnings, `${box.sourceMapPath}[${JSON.stringify(box.matchedPattern)}] targets a skipped or disallowed variant.`);
 			if ((box.inherited || box.fallback || String(box.matchedPattern).includes('*')) && matches.length > 1) {
 				addWarning(warnings, `${box.sourceMapPath}[${JSON.stringify(box.matchedPattern)}] affects ${matches.length} variants; edit the shared rule only intentionally.`);
+			}
+		}
+		let rotate_source = box.assetRotateY || box.sourcePointer?.assetRotateY;
+		if (rotate_source?.isByType && rotate_source.matchedPattern && Array.isArray(options.variants)) {
+			let matches = options.variants.filter(variant => wildcardMatch(rotate_source.matchedPattern, variant.variantCode || variant.codePath || variant.code));
+			if (!matches.length) addWarning(warnings, `${rotate_source.sourceMapPath}[${JSON.stringify(rotate_source.matchedPattern)}] matches no generated variants.`);
+			let exact = options.variants.find(variant => String(variant.variantCode || '').toLowerCase() === String(rotate_source.matchedPattern).toLowerCase());
+			if (exact && exact.included === false) addWarning(warnings, `${rotate_source.sourceMapPath}[${JSON.stringify(rotate_source.matchedPattern)}] targets a skipped or disallowed variant.`);
+			if ((rotate_source.inherited || rotate_source.fallback || String(rotate_source.matchedPattern).includes('*')) && matches.length > 1) {
+				addWarning(warnings, `${rotate_source.sourceMapPath}[${JSON.stringify(rotate_source.matchedPattern)}] affects ${matches.length} variants; rotateY is a shared block-level rule.`);
 			}
 		}
 	});

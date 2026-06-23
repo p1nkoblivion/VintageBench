@@ -15,6 +15,10 @@ Vintage Bench modifications:
 Copyright (C) 2026 P1nkOblivion
 
 This fork modifies Blockbench for Vintage Story-focused cuboid model editing.
+Modified-work notice: Vintage Bench changes began on 2026-06-22 and continue
+through later release commits. See CHANGELOG.md and source history for dated
+modification details.
+
 The first cleanup pass removes or disables user-facing Minecraft-specific
 formats, Bedrock-specific workflows, mesh-modeling features, and hosted web
 application behavior while preserving the desktop cuboid editing base.
@@ -23,6 +27,17 @@ Vintage Bench is distributed as a modified version of Blockbench under the
 GNU General Public License version 3. This program is distributed WITHOUT ANY
 WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
 A PARTICULAR PURPOSE.
+
+No additional EULA or release terms may restrict GPL-3.0 redistribution,
+modification, or source-code access rights for Vintage Bench.
+
+Vintage Bench does not bundle proprietary Vintage Story game assets. Preview
+references are placeholders, original calibration backdrops, or loaded from a
+user-selected local Vintage Story installation at runtime.
+
+Models, textures, animations, screenshots, mods, and other assets created by
+users with Vintage Bench are owned by their creators. Using Vintage Bench does
+not automatically license user-created assets under GPL-3.0.
 
 Vintage Bench is not affiliated with, endorsed by, or sponsored by the
 original Blockbench project or by the owners or developers of Vintage Story.

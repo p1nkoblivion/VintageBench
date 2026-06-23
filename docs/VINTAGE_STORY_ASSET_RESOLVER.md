@@ -43,30 +43,51 @@ Variant expansion follows the Vintage Story source path used by `ModRegistryObje
 
 ## By-Type Resolution
 
-Vintage Story resolves `*ByType` maps in source order. The first key matching the resolved variant code wins. Vintage Bench intentionally mirrors that behavior:
+Vintage Bench resolves every `*ByType` map through the same core resolver:
 
-- Exact keys match the full concrete variant path.
-- Wildcard keys use case-insensitive `*` matching.
+- Exact keys matching the full concrete variant path win over wildcard keys.
+- Wildcard keys use deterministic, case-insensitive `*` matching.
+- More specific wildcard keys win over less specific wildcard keys.
+- `*` is the fallback when no exact or more-specific wildcard key matches.
+- Source order is used only as the deterministic tie-breaker for equally specific patterns.
 - Keys starting with `@` are treated as regular expressions.
-- `*` is only a fallback when it appears before no other matching key.
-- Source order wins over "more specific" matching.
 
 This applies to:
 
 - `shapeByType`
 - `texturesByType`
+- `creativeinventoryByType`
+- `attributesByType`
+- `collisionboxByType`
+- `collisionboxesByType`
+- `selectionboxByType`
+- `selectionboxesByType`
+- `collisionSelectionBoxesByType`
+- `rotateYByType`
 - `guiTransformByType`
 - `groundTransformByType`
 - `tpHandTransformByType`
+- `tpOffHandTransformByType`
 - `fpHandTransformByType`
+- `toolrackTransformByType`
+- lowercase maps such as `attackpowerbytype`, `durabilitybytype`, and `tooltierbytype`
 - `attributes.*TransformByType`
-- other future `*ByType` maps handled by the generic resolver
+- nested transform maps such as `attributes.inFirePitPropsByType["pattern"].transform`
+- custom or unknown `*ByType` maps handled by the generic resolver
+
+Resolved asset variants include generic `byTypeSources` entries for matched maps. Each entry preserves the source map path, matched source path, target path, matched pattern, source index, and exact/inherited/fallback flags so named and custom maps keep addressable provenance.
 
 Path variables such as `{type}` and `{metal}` are substituted from the selected variant states.
 
 ## Shape Resolution
 
 Shape references are resolved from `shapeByType`, `shape`, `client.shapeByType`, `client.shape`, `shapeInventoryByType`, or `shapeInventory`.
+
+Shape refs must be Vintage Story asset base paths, not filesystem paths. Absolute paths, Windows backslashes, empty path segments, and `..` traversal segments are invalid. Shape refs are always mapped under:
+
+`<asset-root>/assets/<domain>/shapes/<base>.json`
+
+`shape.alternates` entries are imported for the selected variant and validated against the same shapes folder. Missing alternates warn with their exact `shape.alternates[index]` JSON path. The Shape Alternatives panel can open an existing alternate shape or create a new alternate shape file from the current model and add it to the owning item/block asset.
 
 The resolver searches asset roots in this order:
 
@@ -98,6 +119,8 @@ Texture paths resolve under:
 
 `<asset-root>/assets/<domain>/textures/<base>.png`
 
+Texture refs use the same asset-base safety rules as shape refs, but they resolve under `textures`, never `shapes`. Identical-looking base strings such as `block/clay/redclay` are kept separate by the resolver folder argument.
+
 Unprefixed texture refs use the current asset object's domain. For a vanilla survival block opened from `assets/survival/blocktypes`, `block/clay/{color}clay` resolves under `assets/survival/textures`. For a mod asset opened from `assets/blushandbins`, the same unprefixed path resolves under `assets/blushandbins/textures`. Cross-domain refs must include the domain, such as `game:block/clay/{color}clay` or `blushlibrary:block/clay/{color}clay`.
 
 CompositeTexture object refs are valid path-bearing refs:
@@ -111,7 +134,16 @@ textures: {
 
 The resolver substitutes variant placeholders before path lookup, so the blue variant resolves `block/clay/{color}clay` to `block/clay/blueclay`.
 
-`.png`, `.jpg`, and `.jpeg` are checked. Missing textures warn but do not block opening the model.
+`.png`, `.jpg`, and `.jpeg` are checked. Missing texture files warn but do not block opening the model. A shape face reference such as `#blade` also warns when neither shape `textures`, root `textures`, nor selected `texturesByType` defines `blade`.
+
+The Texture Manager panel lists the selected variant's resolved aliases and separates:
+
+- Shape alias defaults
+- Item/block `textures` overrides
+- Item/block `texturesByType` overrides
+- Missing aliases referenced by faces
+
+Relinking a shape-owned alias writes an item/block `textures` override. Relinking an inherited `texturesByType` value creates an exact selected-variant override by default. Editing the shared wildcard or fallback rule requires choosing `Edit Shared Rule`.
 
 ## Transform Source Pointers
 
@@ -155,13 +187,26 @@ The inherited `*` or wildcard rule remains unchanged unless the user explicitly 
 Saving a Vintage Story asset-context session writes:
 
 - Shape geometry to the resolved shape JSON.
+- Alternate shape geometry to the opened alternate shape JSON.
 - Display transform edits to the source item/block JSON.
+- Shape alternate list edits to the source item/block JSON.
+- Texture relinks and overrides to the source item/block JSON.
 
 Display transforms are not written to shape JSON during asset-context saves.
 
-Item/block-owned texture overrides are imported for preview only. Asset-context shape saves preserve the original shape `textures` and `textureSizes` entries instead of copying item/block texture overrides into the shape file.
+Item/block-owned texture overrides are imported for preview and managed by the Texture Manager. Asset-context shape saves preserve the original shape `textures` and `textureSizes` entries instead of copying item/block texture overrides into the shape file.
 
 If the item/block source file is under the configured Vintage Story game asset root, Vintage Bench warns before overwriting it. A later pass should add a fuller "Save As / Copy To Mod Workspace" flow for vanilla assets.
+
+Save and export paths are folder-checked before writing:
+
+- shapes must target `assets/<domain>/shapes`
+- item assets must target `assets/<domain>/itemtypes`
+- block assets must target `assets/<domain>/blocktypes`
+- textures must target `assets/<domain>/textures`
+- lang files must target `assets/<domain>/lang`
+
+Generated asset JSON is rejected if any string contains an absolute filesystem path, a Windows backslash, or a path traversal segment.
 
 ## Raw Shape Mode
 
@@ -175,6 +220,5 @@ A future pass can add asset-root search for "Find item/block assets that referen
 
 - `loadFromProperties` variant groups are warned about but not expanded.
 - Formatting and comments are normalized on item/block writeback.
-- Texture alias editing writeback is not implemented in this pass.
 - Vanilla asset "copy to mod workspace" is warned about but not automated.
 - The variant chooser resolves every row for accurate warnings; very large variant sets may need lazy resolution later.

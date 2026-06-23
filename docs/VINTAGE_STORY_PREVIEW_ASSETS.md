@@ -16,9 +16,9 @@ The first-launch setup asks the user for this folder and stores it in the `vinta
 
 Expected source paths under the selected Vintage Story folder:
 
-- `assets/game/shapes/entity/humanoid/seraph.json`
-- `assets/survival/entities/nonliving/mannequin.json`
-- `assets/survival/blocktypes/wood/mannequin.json`
+- `assets/game/shapes/entity/humanoid/seraph.json` for the Seraph reference and attachment-slot marker preview
+- `assets/survival/entities/nonliving/mannequin.json` for the armor stand entity reference, which resolves through `client.shape.base`
+- `assets/survival/blocktypes/wood/mannequin.json` for the mannequin block reference
 - `assets/survival/blocktypes/wood/displaycase.json`
 - `assets/survival/blocktypes/wood/toolrack.json`
 - `assets/survival/blocktypes/wood/moldrack.json`
@@ -37,7 +37,7 @@ Expected source paths under the selected Vintage Story folder:
 This pass centralizes:
 
 - `vintage_story_assets_path` setting and first-run folder prompt.
-- `js/display_mode/vintage_story_preview_assets.js` asset metadata, local path resolution, JSON-like asset parsing, shape indirection, and texture resolution.
+- `js/display_mode/vintage_story_preview_assets.js` asset metadata, root-contained local path resolution, JSON-like asset parsing, shape indirection, attachment-slot preview metadata, and texture resolution.
 - `js/display_mode/vintage_story_asset_parser.js` conservative parser for shipped Vintage Story JSON-like files that use comments, unquoted keys, single-quoted strings, or trailing commas.
 - Vintage Story display context metadata in `js/display_mode/vintage_story_display_transforms.js`.
 - Local Vintage Story shape-to-preview conversion in `js/display_mode/display_mode.js`.
@@ -48,14 +48,18 @@ Modified for Vintage Bench on 2026-06-22: preview texture lookup now follows the
 
 Modified for Vintage Bench on 2026-06-22: preview shape conversion follows Vintage Story parent-child transform order. Each element applies `rotationOrigin`, rotation, scale, then `from - rotationOrigin`; child elements are parented below that translated anchor instead of being flattened as Blockbench-style sibling groups.
 
-Missing local assets, unresolved shapes, or unresolved textures do not crash the Display editor. The UI continues to open with placeholders or neutral materials and shows a short warning for the first issue encountered.
+Missing local assets, unresolved shapes, or unresolved textures do not crash the Display editor. The UI continues to open with neutral placeholder geometry or neutral materials and shows a short warning for the first issue encountered.
+
+Modified for Vintage Bench on 2026-06-23: Seraph, armor stand, mannequin, and attachment-slot previews load only from the user-selected Vintage Story asset root. Preview paths are resolved as candidates under that root; paths that would leave the configured root are ignored. No proprietary Vintage Story shape or texture files are bundled in the repository or copied into generated mods.
+
+Attachment-slot preview uses the local Seraph shape's `attachmentpoints` data when it is available. Slot markers are editor-authored colored cuboids layered on the local Seraph reference. They do not move or export the user's current attached shape; the attached-shape viewport preview remains standalone for this pass.
 
 Modified for Vintage Bench on 2026-06-22: GUI display previews use two bundled reference screenshots, `assets/inventory_full.png` and `assets/hud.png`. These are not copied Vintage Story shape or texture assets; they are calibration backdrops for the GUI item slot. The Display editor centers `guiTransform` on the blue highlighted slot in each image and scales the highlighted slot to 16 model units.
 
 Current limitations:
 
 - Shape variants are resolved with safe defaults such as `generic`, `complete`, `normal`, `wood`, `aged`, `square`, and firepit `extinct`; full Vintage Story variant/material resolution is not implemented yet.
-- Animation poses, attachment point behavior, overlay textures, and runtime renderer-specific effects are not previewed yet.
+- Animation poses, runtime attachment behavior, overlay textures, and renderer-specific effects are not previewed yet.
 - GUI preview now aligns to the highlighted HUD and inventory slot backdrops, but final in-game camera, lighting, and raster-size matching still need validation.
 
 ## TODOs

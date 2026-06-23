@@ -417,9 +417,9 @@ onVueSetup(async function() {
 								<li class="format_category">
 									<label>${tl('mode.start.info')}</label>
 									<ul>
-										<li class="format_entry start_screen_link">
+										<li class="format_entry start_screen_link" @click="openLink('https://github.com/JannisX11/blockbench')" title="Open the original Blockbench repository">
 											<span class="icon_wrapper f_left"><i class="material-icons">help</i></span>
-											<label>Vintage Story JSON work is TODO in a later pass.</label>
+											<label>Vintagebench is a Fork of Blockbench, modified for the Vintage Story game.</label>
 										</li>
 									</ul>
 								</li>
@@ -621,8 +621,7 @@ onVueSetup(async function() {
 		}
 	})
 	documentReady.then(() => {
-		// TODO(Vintage Story): Add local Vintage Bench release notes or migration notices
-		// without relying on Blockbench web news/update infrastructure.
+		// Vintage Bench uses the static home info block above instead of hosted update/news infrastructure.
 	})
 })()
 
