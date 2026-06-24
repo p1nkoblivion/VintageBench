@@ -104,7 +104,10 @@ function addTreeRow(rows, depth, kind, label, path = '', extra = {}) {
 
 function buildTreeRows(workspace, files, PathModule) {
 	let rows = [];
-	addTreeRow(rows, 0, 'workspace', 'Mod Workspace', workspace?.modRoot || '');
+	addTreeRow(rows, 0, 'workspace', 'Workspace', workspace?.modRoot || '');
+	if (!workspace?.modRoot && !workspace?.assetsRoot && !workspace?.domain) {
+		return rows;
+	}
 	addTreeRow(rows, 1, 'modinfo', 'modinfo.json', files.modinfo || pathJoin(PathModule, workspace?.modRoot || '', 'modinfo.json'));
 	addTreeRow(rows, 1, 'assets', 'assets', workspace?.assetsRoot ? pathJoin(PathModule, workspace.modRoot, 'assets') : '');
 	addTreeRow(rows, 2, 'domain', workspace?.domain ? `assets/${workspace.domain}` : 'assets/<domain>', workspace?.assetsRoot || '');

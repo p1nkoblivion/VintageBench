@@ -69,8 +69,6 @@ function setupSettings() {
 		Interface.status_bar.vue.$data.streamer_mode = settings.streamer_mode.value;
 		updateStreamerModeNotification();
 	}});
-	new Setting('classroom_mode', {value: false, requires_restart: true});
-	new Setting('cdn_mirror', {value: false});
 	new Setting('recovery_save_interval', {value: 30, type: 'number', min: 0, onChange() {
 		clearTimeout(AutoBackup.loop_timeout);
 		AutoBackup.backupProjectLoop(false);
@@ -102,7 +100,6 @@ function setupSettings() {
 	new Setting('status_bar_transform_sliders', {category: 'interface', value: true, condition: Blockbench.isTouch, onChange(value) {
 		updateInterface();
 	}});
-	new Setting('always_show_splash_art',{category: 'interface', value: true});
 	new Setting('origin_size',  		{category: 'interface', value: 10, type: 'number', min: 2, max: 40});
 	new Setting('control_size',  		{category: 'interface', value: 10, type: 'number', min: 2, max: 40});
 	new Setting('motion_trails',  		{category: 'interface', value: true, onChange() {
@@ -183,35 +180,33 @@ function setupSettings() {
 	}});
 	new Setting('fps_limit',						{category: 'preview', value: 144, min: 10, max: 1024, type: 'number'});
 	new Setting('background_rendering', 			{category: 'preview', value: true});
-	new Setting('flipbook_textures_in_animation',	{category: 'preview', value: true});
 	new Setting('particle_tick_rate',				{category: 'preview', value: 30, type: 'number', min: 1, max: 1000, onChange() {
 		WinterskyScene.global_options.tick_rate = this.value;
 	}});
 	new Setting('volume', 							{category: 'preview', value: 80, min: 0, max: 200, type: 'number'});
-	new Setting('audio_scrubbing',					{category: 'preview', value: true});
 	new Setting('save_view_per_tab',				{category: 'preview', value: true});
-	new Setting('vintage_story_assets_path',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
-	new Setting('vintage_story_mod_root_path',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
-	new Setting('vintage_story_mod_domain',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
-	new Setting('vintage_story_mod_type',			{category: 'preview', value: 'content', type: 'text', condition: isApp, launch_setting: true});
-	new Setting('vintage_story_mod_name',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
-	new Setting('vintage_story_mod_author',			{category: 'preview', value: 'P1nkOblivion', type: 'text', condition: isApp, launch_setting: true});
-	new Setting('vintage_story_mod_version',			{category: 'preview', value: '1.0.0', type: 'text', condition: isApp, launch_setting: true});
-	new Setting('vintage_story_mod_description',		{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
-	new Setting('vintage_story_mod_dependencies',		{category: 'preview', value: 'game=', type: 'text', condition: isApp, launch_setting: true});
-	new Setting('vintage_story_mod_website',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
-	new Setting('vintage_story_mod_icon_path',		{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
-	new Setting('vintage_story_data_path',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
-	new Setting('vintage_story_mods_path',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
-	new Setting('vintage_story_package_output_path',	{category: 'preview', value: getDefaultVintageBenchModExportsPath(), type: 'text', condition: isApp, launch_setting: true});
-	new Setting('vintage_story_create_backups',		{category: 'preview', value: true, type: 'checkbox', condition: isApp, launch_setting: true});
-	new Setting('vintage_story_mod_assets_path',		{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
-	new Setting('vintage_story_shapes_path',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
-	new Setting('vintage_story_textures_path',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
-	new Setting('vintage_story_blocktypes_path',		{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
-	new Setting('vintage_story_itemtypes_path',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
-	new Setting('vintage_story_lang_path',			{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
-	new Setting('vintage_story_additional_assets_paths',	{category: 'preview', value: '', type: 'text', condition: isApp, launch_setting: true});
+	new Setting('vintage_story_assets_path',			{category: 'preview', value: '', type: 'text', condition: false, launch_setting: true});
+	new Setting('vintage_story_mod_root_path',			{category: 'preview', value: '', type: 'text', condition: false, launch_setting: true});
+	new Setting('vintage_story_mod_domain',			{category: 'preview', value: '', type: 'text', condition: false, launch_setting: true});
+	new Setting('vintage_story_mod_type',			{category: 'preview', value: 'content', type: 'text', condition: false, launch_setting: true});
+	new Setting('vintage_story_mod_name',			{category: 'preview', value: '', type: 'text', condition: false, launch_setting: true});
+	new Setting('vintage_story_mod_author',			{category: 'preview', value: 'P1nkOblivion', type: 'text', condition: false, launch_setting: true});
+	new Setting('vintage_story_mod_version',			{category: 'preview', value: '1.0.0', type: 'text', condition: false, launch_setting: true});
+	new Setting('vintage_story_mod_description',		{category: 'preview', value: '', type: 'text', condition: false, launch_setting: true});
+	new Setting('vintage_story_mod_dependencies',		{category: 'preview', value: 'game=', type: 'text', condition: false, launch_setting: true});
+	new Setting('vintage_story_mod_website',			{category: 'preview', value: '', type: 'text', condition: false, launch_setting: true});
+	new Setting('vintage_story_mod_icon_path',		{category: 'preview', value: '', type: 'text', condition: false, launch_setting: true});
+	new Setting('vintage_story_data_path',			{category: 'preview', value: '', type: 'text', condition: false, launch_setting: true});
+	new Setting('vintage_story_mods_path',			{category: 'preview', value: '', type: 'text', condition: false, launch_setting: true});
+	new Setting('vintage_story_package_output_path',	{category: 'preview', value: getDefaultVintageBenchModExportsPath(), type: 'text', condition: false, launch_setting: true});
+	new Setting('vintage_story_create_backups',		{category: 'preview', value: true, type: 'checkbox', condition: false, launch_setting: true});
+	new Setting('vintage_story_mod_assets_path',		{category: 'preview', value: '', type: 'text', condition: false, launch_setting: true});
+	new Setting('vintage_story_shapes_path',			{category: 'preview', value: '', type: 'text', condition: false, launch_setting: true});
+	new Setting('vintage_story_textures_path',			{category: 'preview', value: '', type: 'text', condition: false, launch_setting: true});
+	new Setting('vintage_story_blocktypes_path',		{category: 'preview', value: '', type: 'text', condition: false, launch_setting: true});
+	new Setting('vintage_story_itemtypes_path',			{category: 'preview', value: '', type: 'text', condition: false, launch_setting: true});
+	new Setting('vintage_story_lang_path',			{category: 'preview', value: '', type: 'text', condition: false, launch_setting: true});
+	new Setting('vintage_story_additional_assets_paths',	{category: 'preview', value: '', type: 'text', condition: false, launch_setting: true});
 
 	new Setting('viewport_rotate_speed',	{category: 'controls', value: 100, min: 10, max: 1000, type: 'number', onChange(value) {
 		Preview.all.forEach(viewport => viewport.controls.rotateSpeed = value / 100)
@@ -222,7 +217,7 @@ function setupSettings() {
 	new Setting('editor_2d_zoom_speed',		{category: 'controls', value: 100, min: 10, max: 1000, type: 'number'});
 	new Setting('gamepad_controls',			{category: 'controls', value: false, name: 'Gamepad Controls', description: 'Use a gamepad or 3D mouse to navigate the viewport'});
 	new Setting('double_click_switch_tools',{category: 'controls', value: true});
-	new Setting('canvas_unselect',  		{category: 'controls', value: false});
+	new Setting('canvas_unselect',  		{category: 'controls', value: true});
 	new Setting('double_click_select_reference',{category: 'controls', value: true});
 	new Setting('selection_tolerance', 		{category: 'controls', value: 10, type: 'number', min: 1, max: 50});
 
@@ -233,11 +228,6 @@ function setupSettings() {
 		updateCubeHighlights();
 	}});
 	new Setting('outliner_reveal_on_select', {category: 'edit', value: true})
-	new Setting('allow_display_slot_mirror', {category: 'edit', value: false, onChange(value) {
-		DisplayMode.vue.allow_mirroring = value;
-	}})
-	new Setting('local_position_values',	{category: 'edit', value: false});
-	new Setting('transform_cube_from_center',{category: 'edit', value: false});
 	new Setting('deactivate_size_limit',	{category: 'edit', value: false});
 	new Setting('vertex_merge_distance',	{category: 'edit', value: 0.1, step: 0.01, type: 'number', min: 0});
 	new Setting('preview_paste_behavior',	{category: 'edit', value: 'always_ask', type: 'select', options: {
@@ -248,7 +238,6 @@ function setupSettings() {
 	}});
 	new Setting('stretch_linked',			{category: 'edit', value: true});
 	new Setting('auto_keyframe',			{category: 'edit', value: true});
-	new Setting('detect_flipbook_textures',	{category: 'edit', value: true});
 
 	//Paint
 	new Setting('color_picker_style',			{category: 'paint', value: 'box', type: 'select',
@@ -342,8 +331,6 @@ function setupSettings() {
 	new Setting('uniform_keyframe',					{category: 'defaults', value: true});
 	
 	//Dialogs
-	new Setting('dialog_larger_cubes', 		{category: 'dialogs', value: true, name: tl('message.model_clipping.title'), description: tl('settings.dialog.desc', [tl('message.model_clipping.title')])});
-	new Setting('dialog_rotation_limit', 	{category: 'dialogs', value: true, name: tl('message.rotation_limit.title'), description: tl('settings.dialog.desc', [tl('message.rotation_limit.title')])});
 	new Setting('dialog_loose_texture', 	{category: 'dialogs', value: true, name: tl('message.loose_texture.title'), description: tl('settings.dialog.desc', [tl('message.loose_texture.title')])});
 	new Setting('dialog_invalid_characters',{category: 'dialogs', value: true, name: tl('message.invalid_characters.title'), description: tl('settings.dialog.desc', [tl('message.invalid_characters.title')])});
 	new Setting('dialog_save_codec',		{category: 'dialogs', value: true, name: tl('message.save_codec_selector.title'), description: tl('settings.dialog.desc', [tl('message.save_codec_selector.title')])});
@@ -352,8 +339,6 @@ function setupSettings() {
 	new Setting('recent_projects', {category: 'application', value: 32, max: 256, min: 0, type: 'number', condition: isApp});
 	new Setting('backup_interval', {category: 'application', value: 10, type: 'number', min: 0, condition: isApp});
 	new Setting('backup_retain', {category: 'application', value: 30, type: 'number', min: 0, condition: isApp});
-	new Setting('automatic_updates', {category: 'application', value: true, condition: isApp});
-	new Setting('update_to_prereleases', {category: 'application', value: false, condition: isApp, launch_setting: true});
 	new Setting('hardware_acceleration', {category: 'application', value: true, requires_restart: true, condition: isApp, launch_setting: true});
 	
 	//Export
@@ -363,7 +348,6 @@ function setupSettings() {
 		spaces_2: tl('settings.json_indentation.spaces_2'),
 	}});
 	new Setting('final_newline',		{category: 'export', value: false});
-	new Setting('minifiedout',			{category: 'export', value: false});
 	new Setting('export_asset_paths',	{category: 'export', condition: isApp, value: 'relative', type: 'select', options: {
 		relative: tl('settings.export_asset_paths.relative'),
 		absolute: tl('settings.export_asset_paths.absolute'),
@@ -371,10 +355,7 @@ function setupSettings() {
 		none: tl('settings.export_asset_paths.none'),
 	}});
 	new Setting('embed_textures', 		{category: 'export', value: true});
-	new Setting('minify_bbmodel', 		{category: 'export', value: true});
-	new Setting('export_empty_groups',	{category: 'export', value: true});
 	new Setting('animation_sample_rate',{category: 'export', value: 24, type: 'number', min: 1, max: 640});
-	new Setting('credit', 				{category: 'export', value: 'Made with Blockbench', type: 'text'});
 
 	Blockbench.onUpdateTo('5.0.0', () => {
 		settings.antialiasing_bleed_fix.set(true);

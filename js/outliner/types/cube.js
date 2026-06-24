@@ -1129,6 +1129,60 @@ new Property(Cube, 'number', 'light_emission', {
 		}
 	}
 });
+const vintage_story_element_condition = () => typeof Project !== 'undefined' && !!Project && (
+	Project.export_codec === 'vintage_story_json' ||
+	(typeof Format !== 'undefined' && Format?.codec?.id === 'vintage_story_json') ||
+	!!Project.vintage_story_data
+);
+new Property(Cube, 'enum', 'vs_cullface_mode', {
+	default: 'preserve',
+	values: ['preserve', 'off', 'self'],
+	condition: vintage_story_element_condition,
+	inputs: {
+		element_panel: {
+			input: {label: 'vintage_story.element.culling', description: 'vintage_story.element.culling.desc', type: 'select', options: {
+				preserve: 'vintage_story.element.culling.preserve',
+				off: 'vintage_story.element.culling.off',
+				self: 'vintage_story.element.culling.self'
+			}}
+		}
+	}
+});
+new Property(Cube, 'number', 'vs_glow', {
+	default: -1,
+	condition: vintage_story_element_condition,
+	inputs: {
+		element_panel: {
+			input: {label: 'vintage_story.element.glow', description: 'vintage_story.element.glow.desc', type: 'number', min: -1, max: 255, step: 1, force_step: true}
+		}
+	}
+});
+new Property(Cube, 'number', 'vs_light_level', {
+	default: -1,
+	condition: vintage_story_element_condition,
+	inputs: {
+		element_panel: {
+			input: {label: 'vintage_story.element.light_level', description: 'vintage_story.element.light_level.desc', type: 'number', min: -1, max: 32, step: 1, force_step: true}
+		}
+	}
+});
+new Property(Cube, 'number', 'vs_render_pass', {
+	default: -1,
+	condition: vintage_story_element_condition,
+	inputs: {
+		element_panel: {
+			input: {label: 'vintage_story.element.render_pass', description: 'vintage_story.element.render_pass.desc', type: 'number', min: -1, step: 1, force_step: true}
+		}
+	}
+});
+new Property(Cube, 'string', 'vs_wind_mode', {
+	condition: vintage_story_element_condition,
+	inputs: {
+		element_panel: {
+			input: {label: 'vintage_story.element.wind_mode', description: 'vintage_story.element.wind_mode.desc', type: 'text', placeholder: 'WeakWind'}
+		}
+	}
+});
 // Modified for Vintage Bench on 2026-06-22: preserves uneditable Vintage Story element JSON during import/export.
 new Property(Cube, 'object', 'vintage_story');
 

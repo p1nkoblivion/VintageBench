@@ -2,15 +2,7 @@
 	<div class="vintage_asset_explorer_panel">
 		<div class="bar vintage_asset_explorer_toolbar">
 			<div class="tool" title="Refresh" @click="refresh"><i class="material-icons">refresh</i></div>
-			<div class="tool wide" @click="openSelected">Open</div>
-			<div class="tool" title="Open generated package folder" @click="openPackageFolder"><i class="material-icons">inventory_2</i></div>
-		</div>
-
-		<div class="vintage_asset_context_notice" v-if="workspaceLabel">
-			<div class="vintage_asset_context_status">
-				<label>Workspace</label>
-				<span>{{ workspaceLabel }}</span>
-			</div>
+			<div class="tool wide" @click="openSelected">Open Workspace</div>
 		</div>
 
 		<div class="vintage_asset_explorer_tree">
@@ -85,10 +77,6 @@ export default {
 		activeFindingGroup() {
 			return VintageStoryAssetExplorer.getActiveFindingGroup();
 		},
-		workspaceLabel() {
-			let workspace = VintageStoryAssetExplorer.ensureScan()?.workspace;
-			return workspace?.domain ? `${workspace.domain} · ${workspace.modRoot || ''}` : workspace?.modRoot || '';
-		},
 		messages() {
 			let scan = VintageStoryAssetExplorer.ensureScan();
 			return (scan?.errors || []).concat(scan?.warnings || []);
@@ -119,9 +107,6 @@ export default {
 		},
 		revealFinding(finding) {
 			VintageStoryAssetExplorer.revealFinding(finding);
-		},
-		openPackageFolder() {
-			VintageStoryAssetExplorer.openPackageFolder();
 		},
 		isFileRow(row) {
 			return ['itemtype', 'blocktype', 'shape', 'texture', 'lang', 'modinfo'].includes(row.kind);

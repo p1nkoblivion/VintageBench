@@ -594,34 +594,6 @@ export function rotateOnAxis(modify, axis, slider) {
 	var things = getRotationObjects();
 	if (!things) return;
 	if (things instanceof Array == false) things = [things];
-	//Warning
-	if (Format.rotation_limit && settings.dialog_rotation_limit.value && !Dialog.open) {
-		var i = 0;
-		while (i < Cube.selected.length) {
-			if (Cube.selected[i].rotation[(axis+1)%3] ||
-				Cube.selected[i].rotation[(axis+2)%3]
-			) {
-				i = Infinity
-
-				let format_version_message = 'You can also switch to a newer format version in your project settings if you are targeting Minecraft 1.21.11 or newer.';
-				Blockbench.showMessageBox({
-					title: tl('message.rotation_limit.title'),
-					icon: 'rotate_right',
-					message: tl('message.rotation_limit.message') + '\n\n' + format_version_message,
-					checkboxes: {
-						dont_show_again: {value: false, text: 'dialog.dontshowagain'}
-					}
-				}, (button, checkboxes = {}) => {
-					if (checkboxes.dont_show_again) {
-						settings.dialog_rotation_limit.set(false);
-					}
-				})
-				return;
-				//Gotta stop the numslider here
-			}
-			i++;
-		}
-	}
 	var axis_letter = getAxisLetter(axis)
 	var origin = things[0].origin
 	things.forEach(function(obj, i) {
@@ -836,12 +808,6 @@ BARS.defineActions(function() {
 	function moveOnAxis(modify, axis) {
 		Outliner.selected.forEach(function(obj, i) {
 			let space_offset = 0;
-			if (settings.local_position_values.value &&
-				obj.parent instanceof OutlinerNode &&
-				obj.parent.getTypeBehavior('use_absolute_position')
-			) {
-				space_offset = -obj.parent.origin[axis];
-			}
 			let modifyInSpace = (real_value) => {
 				return modify(real_value + space_offset) - space_offset;
 			}
@@ -860,19 +826,12 @@ BARS.defineActions(function() {
 				obj.preview_controller.updateGeometry(obj);
 
 			} else if (obj.getTypeBehavior('movable')) {
-				if (settings.transform_cube_from_center.value && obj.from && obj.to) {
-					let before = Math.lerp(obj.from[axis], obj.to[axis], 0.5);
-					var val = modifyInSpace(before);
-					obj.from[axis] += val - before;
-					obj.to[axis] += val - before;
-				} else {
-					let main_pos = obj.from || obj.position;
-					let before = main_pos[axis];
-					var val = modifyInSpace(before);
-					main_pos[axis] = val;
-					if (obj.to) {
-						obj.to[axis] += (val - before);
-					}
+				let main_pos = obj.from || obj.position;
+				let before = main_pos[axis];
+				var val = modifyInSpace(before);
+				main_pos[axis] = val;
+				if (obj.to) {
+					obj.to[axis] += (val - before);
 				}
 				if (obj instanceof Cube) {
 					if (Format.cube_size_limiter && !settings.deactivate_size_limit.value) {
@@ -895,18 +854,10 @@ BARS.defineActions(function() {
 			vertices.forEach(vkey => sum += element.vertices[vkey][axis]);
 			value = sum / vertices.length;
 
-		} else if (element.from && element.to && settings.transform_cube_from_center.value) {
-			value = Math.lerp(element.from[axis], element.to[axis], 0.5);
 		} else if (element.from) {
 			value = element.from[axis];
 		} else {
 			value = element.origin[axis]
-		}
-		if (settings.local_position_values.value &&
-			element.parent instanceof OutlinerNode &&
-			element.parent.getTypeBehavior('use_absolute_position')
-		) {
-			value -= element.parent.origin[axis];
 		}
 		return value;
 	}
@@ -981,14 +932,7 @@ BARS.defineActions(function() {
 		Outliner.selected.forEach(function(obj, i) {
 			if (obj.getTypeBehavior('resizable')) {
 				let bidirectional = obj instanceof Mesh;
-				let center = (obj.from && obj.to) && Math.lerp(obj.from[axis], obj.to[axis], 0.5);
 				obj.resize(modify, axis, false, true, bidirectional);
-				if (obj.from && obj.to && settings.transform_cube_from_center.value) {
-					let offset = Math.lerp(obj.from[axis], obj.to[axis], 0.5) - center;
-					obj.from[axis] -= offset;
-					obj.to[axis] -= offset;
-					obj.preview_controller.updateGeometry(obj);
-				}
 			} else if (obj.getTypeBehavior('scalable')) {
 				obj.scale[axis] = modify(obj.scale[axis]);
 				obj.preview_controller.updateTransform(obj);
@@ -1331,12 +1275,6 @@ BARS.defineActions(function() {
 
 		let modifyInSpace = (real_value, obj) => {
 			let space_offset = 0;
-			if (settings.local_position_values.value &&
-				obj.parent instanceof OutlinerNode &&
-				obj.parent.getTypeBehavior('use_absolute_position')
-			) {
-				space_offset = -obj.parent.origin[axis];
-			}
 			return modify(real_value + space_offset) - space_offset;
 		}
 
@@ -1386,12 +1324,6 @@ BARS.defineActions(function() {
 		}
 		let value = node ? node.origin[axis] : 0;
 
-		if (settings.local_position_values.value &&
-			node?.parent instanceof OutlinerNode &&
-			node.parent.getTypeBehavior('use_absolute_position')
-		) {
-			value -= node.parent.origin[axis];
-		}
 		return value;
 	}
 	new NumSlider('slider_origin_x', {

@@ -132,7 +132,7 @@ export class Texture {
 				this.flags.delete('update_uv_size_from_resolution');
 				let size = [self.width, self.display_height];
 				let frames = self.frameCount;
-				if (settings.detect_flipbook_textures.value == false || frames <= 2 || (frames%1)) {
+				if (frames <= 2 || (frames%1)) {
 					size[1] = self.height;
 				}
 				this.uv_width = size[0];

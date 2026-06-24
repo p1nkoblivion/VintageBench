@@ -36,10 +36,18 @@ const VS_ELEMENT_MAPPED_FIELDS = new Set([
 	'rotationX',
 	'rotationY',
 	'rotationZ',
+	'renderPass',
+	'lightLevel',
 	'children'
 ]);
 const VS_FACE_MAPPED_FIELDS = new Set(['texture', 'uv', 'rotation', 'enabled']);
 const VS_ATTRIBUTE_TRANSFORM_FIELDS = new Set(VS_DISPLAY_ATTRIBUTE_KEYS);
+const VS_FACE_PANEL_FIELDS = new Set(['glow', 'windMode', 'cullface', 'cullFace']);
+const VS_CULLFACE_MODES = {
+	PRESERVE: 'preserve',
+	OFF: 'off',
+	SELF: 'self'
+};
 
 function isPlainObject(value) {
 	return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -70,6 +78,10 @@ function hasKeys(object) {
 	return isPlainObject(object) && Object.keys(object).length > 0;
 }
 
+function hasKeysOutside(object, ignored_fields) {
+	return isPlainObject(object) && Object.keys(object).some(key => !ignored_fields.has(key));
+}
+
 function numberOrDefault(value, fallback = 0) {
 	return typeof value === 'number' && isFinite(value) ? value : fallback;
 }
@@ -88,8 +100,75 @@ function roundedNumber(value) {
 	return Math.round(number * 100000) / 100000;
 }
 
+function clampNumber(value, min, max) {
+	return Math.min(max, Math.max(min, value));
+}
+
 function roundedArray(value, length, fallback = 0) {
 	return numberArray(value, length, fallback).map(roundedNumber);
+}
+
+function hasOwn(source, key) {
+	return isPlainObject(source) && Object.prototype.hasOwnProperty.call(source, key);
+}
+
+function elementNumberOrUnset(element, key) {
+	return hasOwn(element, key) ? numberOrDefault(element[key], -1) : -1;
+}
+
+function presentFaceObjects(faces) {
+	if (!isPlainObject(faces)) return [];
+	return VS_FACE_DIRECTIONS
+		.map(direction => ({direction, data: faces[direction]}))
+		.filter(entry => isPlainObject(entry.data));
+}
+
+function uniformFaceField(faces, field, fallback) {
+	let present_faces = presentFaceObjects(faces);
+	if (!present_faces.length) return fallback;
+	let first_value;
+	for (let i = 0; i < present_faces.length; i++) {
+		let face = present_faces[i].data;
+		if (!hasOwn(face, field)) return fallback;
+		if (i === 0) {
+			first_value = face[field];
+		} else if (JSON.stringify(first_value) !== JSON.stringify(face[field])) {
+			return fallback;
+		}
+	}
+	return cloneJSON(first_value);
+}
+
+function uniformFaceNumberField(faces, field, fallback = -1) {
+	let value = uniformFaceField(faces, field, fallback);
+	return typeof value === 'number' && isFinite(value) ? value : fallback;
+}
+
+function uniformFaceStringField(faces, field, fallback = '') {
+	let value = uniformFaceField(faces, field, fallback);
+	return typeof value === 'string' ? value : fallback;
+}
+
+function uniformCullfaceMode(faces) {
+	let present_faces = presentFaceObjects(faces);
+	if (!present_faces.length) return VS_CULLFACE_MODES.PRESERVE;
+	let all_self = true;
+	let all_off = true;
+	for (let {direction, data} of present_faces) {
+		if (!hasOwn(data, 'cullface')) return VS_CULLFACE_MODES.PRESERVE;
+		if (data.cullface !== direction) all_self = false;
+		if (data.cullface !== '') all_off = false;
+	}
+	if (all_self) return VS_CULLFACE_MODES.SELF;
+	if (all_off) return VS_CULLFACE_MODES.OFF;
+	return VS_CULLFACE_MODES.PRESERVE;
+}
+
+function writeElementNumberField(output, element, property, json_key, had_fields, unset_value = -1) {
+	let value = numberOrDefault(element[property], unset_value);
+	if (value !== unset_value || had_fields.has(json_key)) {
+		output[json_key] = roundedNumber(value);
+	}
 }
 
 function addWarning(warnings, message) {
@@ -325,7 +404,7 @@ function applyFaceToCube(cube, direction, face_data, texture_map, warnings) {
 		}
 		face.texture = texture_map[texture_code].uuid;
 	}
-	if (hasKeys(face.vintage_story.extra)) {
+	if (hasKeysOutside(face.vintage_story.extra, VS_FACE_PANEL_FIELDS)) {
 		addWarning(warnings, `Face "${direction}" contains preserved fields that are not editable yet.`);
 	}
 }
@@ -342,6 +421,11 @@ function createCubeFromVintageStoryElement(element, parent, texture_map, warning
 			numberOrDefault(element.rotationZ, 0)
 		],
 		shade: element.shade !== false,
+		vs_cullface_mode: uniformCullfaceMode(element.faces),
+		vs_glow: uniformFaceNumberField(element.faces, 'glow', -1),
+		vs_light_level: elementNumberOrUnset(element, 'lightLevel'),
+		vs_render_pass: elementNumberOrUnset(element, 'renderPass'),
+		vs_wind_mode: uniformFaceStringField(element.faces, 'windMode', ''),
 		vintage_story: {
 			extra: copyUnknownFields(element, VS_ELEMENT_MAPPED_FIELDS),
 			kind,
@@ -497,12 +581,33 @@ function compileVintageStoryFace(face, direction, texture_data) {
 	return output;
 }
 
+function applyVintageStoryFacePanelFields(output, cube, direction) {
+	let cullface_mode = cube.vs_cullface_mode || VS_CULLFACE_MODES.PRESERVE;
+	if (cullface_mode === VS_CULLFACE_MODES.SELF) {
+		output.cullface = direction;
+	} else if (cullface_mode === VS_CULLFACE_MODES.OFF) {
+		delete output.cullface;
+		delete output.cullFace;
+	}
+
+	let glow = numberOrDefault(cube.vs_glow, -1);
+	if (glow >= 0) {
+		output.glow = clampNumber(roundedNumber(glow), 0, 255);
+	}
+
+	let wind_mode = typeof cube.vs_wind_mode === 'string' ? cube.vs_wind_mode.trim() : '';
+	if (wind_mode) {
+		output.windMode = wind_mode;
+	}
+}
+
 function compileVintageStoryFaces(cube, texture_data) {
 	let faces = {};
 	VS_FACE_DIRECTIONS.forEach(direction => {
 		let face = cube.faces[direction];
 		if (!face) return;
 		let output = compileVintageStoryFace(face, direction, texture_data);
+		if (output) applyVintageStoryFacePanelFields(output, cube, direction);
 		if (output) faces[direction] = output;
 	});
 	return faces;
@@ -541,6 +646,8 @@ function compileVintageStoryCube(cube, texture_data, warnings) {
 	output.from = roundedArray(cube.from, 3, 0);
 	output.to = roundedArray(cube.to, 3, 0);
 	if (cube.shade !== true || had_fields.has('shade')) output.shade = cube.shade !== false;
+	writeElementNumberField(output, cube, 'vs_render_pass', 'renderPass', had_fields);
+	writeElementNumberField(output, cube, 'vs_light_level', 'lightLevel', had_fields);
 	output.faces = compileVintageStoryFaces(cube, texture_data);
 	output.rotationOrigin = roundedArray(cube.origin, 3, 0);
 	applyRotationFields(output, cube.rotation, cube.vintage_story);

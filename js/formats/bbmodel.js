@@ -393,7 +393,7 @@ var codec = new Codec('project', {
 			var compressed = '<lz>'+LZUTF8.compress(json_string, {outputEncoding: 'StorageBinaryString'});
 			return compressed;
 		} else {
-			return compileJSON(model, {small: Settings.get('minify_bbmodel') || options.minify});
+			return compileJSON(model, {small: options.minify === true});
 		}
 	},
 	parse(model, path) {

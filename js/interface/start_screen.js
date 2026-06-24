@@ -206,7 +206,7 @@ onVueSetup(async function() {
 					description: "",
 				}
 			],
-			show_splash_screen: (Blockbench.hasFlag('after_update') || settings.always_show_splash_art.value),
+			show_splash_screen: Blockbench.hasFlag('after_update'),
 			slideshow_selected: 0,
 			slideshow_last: null,
 			slideshow_autoplay: true
@@ -373,9 +373,6 @@ onVueSetup(async function() {
 				}
 			}, 1000);
 
-			if (settings.always_show_splash_art.value && !Blockbench.hasFlag('after_update') && !Blockbench.isMobile) {
-				document.getElementById('start_screen').scrollTop = 100;
-			}
 		},
 		template: `
 			<div id="start_screen">

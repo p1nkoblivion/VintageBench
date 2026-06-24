@@ -851,7 +851,7 @@ function buildSaveAsAssetWizardForm(page_index, state, getDialog, setState) {
 	switch (page_index) {
 		case 0:
 			return Object.assign(form, {
-				domain: {label: 'Mod Domain', value: state.domain, placeholder: 'mycoolmod'},
+				domain: {label: 'Domain', value: state.domain, placeholder: 'game'},
 				asset_type: {type: 'select', label: 'Asset Type', value: state.asset_type, options: {block: 'Block', item: 'Item'}},
 				use_preset: {type: 'checkbox', label: 'Use Preset', value: !!state.use_preset},
 				asset_preset: {type: 'select', label: 'Select Preset', value: state.asset_preset, condition: result => result.use_preset, options: presetSelectOptions()},
@@ -1016,8 +1016,8 @@ export function openVintageStorySaveAsAssetDialog() {
 
 function workspaceFormDefaults() {
 	let workspace = currentWorkspace();
-	let domain = workspace.domain || 'mycoolmod';
-	let mod_root = workspace.modRoot || getSuggestedRoot();
+	let domain = workspace.domain || '';
+	let mod_root = workspace.modRoot || '';
 	let derived = buildVintageStoryWorkspace({modRoot: mod_root, domain, PathModule});
 	return {
 		mod_root,
@@ -1082,8 +1082,8 @@ export function openVintageStoryWorkspaceSettingsDialog() {
 		title: 'Vintage Story Workspace Settings',
 		width: 640,
 		form: {
-			mod_root: {label: 'Mod Root', value: defaults.mod_root, placeholder: 'C:/Mods/MyCoolMod'},
-			domain: {label: 'Domain / Mod ID', value: defaults.domain, placeholder: 'mycoolmod'},
+			mod_root: {label: 'Workspace Root', value: defaults.mod_root, placeholder: 'C:/VintageStory'},
+			domain: {label: 'Domain', value: defaults.domain, placeholder: 'game'},
 			_: '_',
 			mod_type: {type: 'select', label: 'Mod Type', value: defaults.mod_type, options: {content: 'content', code: 'code'}},
 			mod_name: {label: 'Mod Name', value: defaults.mod_name, placeholder: 'My Cool Mod'},
@@ -1094,11 +1094,11 @@ export function openVintageStoryWorkspaceSettingsDialog() {
 			mod_website: {label: 'Website', value: defaults.mod_website, placeholder: 'https://'},
 			mod_icon: {label: 'Mod Icon Path', value: defaults.mod_icon, placeholder: 'modicon.png'},
 			__meta: '_',
-			shapes: {label: 'Shapes Folder', value: defaults.shapes, placeholder: 'assets/mycoolmod/shapes'},
-			textures: {label: 'Textures Folder', value: defaults.textures, placeholder: 'assets/mycoolmod/textures'},
-			blocktypes: {label: 'Blocktypes Folder', value: defaults.blocktypes, placeholder: 'assets/mycoolmod/blocktypes'},
-			itemtypes: {label: 'Itemtypes Folder', value: defaults.itemtypes, placeholder: 'assets/mycoolmod/itemtypes'},
-			lang: {label: 'Lang Folder', value: defaults.lang, placeholder: 'assets/mycoolmod/lang'},
+			shapes: {label: 'Shapes Folder', value: defaults.shapes, placeholder: 'assets/<domain>/shapes'},
+			textures: {label: 'Textures Folder', value: defaults.textures, placeholder: 'assets/<domain>/textures'},
+			blocktypes: {label: 'Blocktypes Folder', value: defaults.blocktypes, placeholder: 'assets/<domain>/blocktypes'},
+			itemtypes: {label: 'Itemtypes Folder', value: defaults.itemtypes, placeholder: 'assets/<domain>/itemtypes'},
+			lang: {label: 'Lang Folder', value: defaults.lang, placeholder: 'assets/<domain>/lang'},
 			__: '_',
 			data_folder: {label: 'Vintage Story Data Folder', value: defaults.data_folder, placeholder: 'C:/Users/<name>/AppData/Roaming/VintagestoryData'},
 			mods_folder: {label: 'Vintage Story Mods Folder', value: defaults.mods_folder, placeholder: '.../VintagestoryData/Mods'},

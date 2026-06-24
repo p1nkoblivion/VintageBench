@@ -819,10 +819,16 @@ BARS.defineActions(function() {
 	})
 })
 
+function isVintageStoryJsonProject() {
+	return Format?.codec?.id === 'vintage_story_json'
+		|| Project?.export_codec === 'vintage_story_json'
+		|| !!Project?.vintage_story_data;
+}
+
 Interface.definePanels(function() {
 	new Panel('bone', {
 		icon: 'fas.fa-bone',
-		condition: !Blockbench.isMobile && {modes: ['animate'], method: () => !AnimationController.selected},
+		condition: !Blockbench.isMobile && {modes: ['animate'], method: () => !AnimationController.selected && !isVintageStoryJsonProject()},
 		display_condition: () => Group.first_selected,
 		default_position: {
 			slot: 'right_bar',

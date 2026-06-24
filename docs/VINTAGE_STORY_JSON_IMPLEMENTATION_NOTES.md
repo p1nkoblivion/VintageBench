@@ -122,6 +122,8 @@ Common face fields:
 
 VSMC2 may also serialize derived/editor fields such as `rotationIndex`. Unknown face fields should be preserved and re-emitted when possible.
 
+Vintage Bench exposes selected Vintage Story metadata in the Element panel: element `renderPass` and `lightLevel`, plus face-wide culling, `glow`, and `windMode`. Mixed per-face values are preserved unless the user sets a new element-wide value.
+
 ### Coordinates and transforms
 
 - Vintage Story shape units use the same 16-unit model grid convention as the existing cuboid editor.
@@ -178,8 +180,8 @@ For this pass:
 
 - Root unknown fields.
 - Root `animations` array.
-- Element unknown fields such as `renderPass`, `attachmentpoints`, `stepParentName`, `scaleX`, `scaleY`, `scaleZ`, unwrap metadata, climate/season maps, and render flags.
-- Face unknown fields such as `glow`, `windMode`, `windData`, `reflectiveMode`, `frostable`, `autoUv`, `snapUv`, and VSMC2 editor fields such as `rotationIndex`.
+- Element unknown fields such as `attachmentpoints`, `stepParentName`, `scaleX`, `scaleY`, `scaleZ`, unwrap metadata, climate/season maps, and render flags other than the editable `renderPass`/`lightLevel` pair.
+- Face unknown fields such as `windData`, `reflectiveMode`, `frostable`, `autoUv`, `snapUv`, and VSMC2 editor fields such as `rotationIndex`. Editable `glow`, `windMode`, and cullface metadata still stay preserved per face when values are mixed.
 - Non-string texture values are preserved as raw JSON on the texture metadata.
 
 ## Advanced asset JSON editing

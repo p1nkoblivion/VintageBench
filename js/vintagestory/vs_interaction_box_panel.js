@@ -37,6 +37,10 @@ function hasProject() {
 	return !!Project && typeof Project === 'object';
 }
 
+function isAnimationMode() {
+	return !!globalThis.Modes?.animate || !!globalThis.Animator?.open;
+}
+
 function migrateInteractionBoxesPanelToOutliner() {
 	migrateStoredPanelPosition('vintage_story_interaction_boxes', position => {
 		if (position.attached_to !== 'element') return false;
@@ -526,8 +530,9 @@ export const VintageStoryInteractionBoxes = {
 	},
 
 	refreshOverlay() {
-		if (!this.visible) {
+		if (!this.visible || isAnimationMode()) {
 			if (this.overlayGroup) this.overlayGroup.visible = false;
+			VintageStoryInteractionBoxHandles.clear();
 			return;
 		}
 		let scene = overlayScene();
@@ -581,6 +586,12 @@ if (typeof Blockbench !== 'undefined') {
 		VintageStoryInteractionBoxes.refreshOverlay();
 		VintageStoryInteractionBoxes.vue?.$forceUpdate?.();
 	});
+	Blockbench.on('select_mode', event => {
+		if (event.mode?.id === 'animate') VintageStoryInteractionBoxes.hideOverlay();
+	});
+	Blockbench.on('unselect_mode', event => {
+		if (event.mode?.id === 'animate') VintageStoryInteractionBoxes.refreshOverlay();
+	});
 }
 
 migrateInteractionBoxesPanelToOutliner();
@@ -588,7 +599,7 @@ migrateInteractionBoxesPanelToOutliner();
 Interface.definePanels(function() {
 	let panel = new Panel('vintage_story_interaction_boxes', {
 		icon: 'select_all',
-		condition: () => hasProject() && (Format?.codec?.id === 'vintage_story_json' || !!Project?.vintage_story_data),
+		condition: () => hasProject() && !isAnimationMode() && (Format?.codec?.id === 'vintage_story_json' || !!Project?.vintage_story_data),
 		default_position: {
 			slot: 'right_bar',
 			float_position: [0, 0],

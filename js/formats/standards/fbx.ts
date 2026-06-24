@@ -153,7 +153,7 @@ var codec = new Codec('fbx', {
 			},
 			FileId: "iVFoobar",
 			CreationTime: dateString,
-			Creator: Settings.get('credit'),
+			Creator: Project.credit || '',
 		})
 
 		model.push({

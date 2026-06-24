@@ -146,38 +146,15 @@ function chooseAssetObject(document, callback) {
 	}).show();
 }
 
-function summarizeRules(resolved) {
-	let rules = [];
-	if (resolved.shape?.matchedPattern) rules.push(`shape ${resolved.shape.matchedPattern}`);
-	let texture_patterns = Object.values(resolved.textures?.aliases || {})
-		.map(alias => alias.matchedPattern)
-		.filter(Boolean)
-		.unique?.() || [];
-	if (!texture_patterns.length) {
-		texture_patterns = [...new Set(Object.values(resolved.textures?.aliases || {}).map(alias => alias.matchedPattern).filter(Boolean))];
-	}
-	if (texture_patterns.length) rules.push(`textures ${texture_patterns.join(', ')}`);
-	let transform_patterns = Object.values(resolved.transforms || {})
-		.map(transform => transform.matchedPattern)
-		.filter(Boolean);
-	transform_patterns = [...new Set(transform_patterns)];
-	if (transform_patterns.length) rules.push(`transforms ${transform_patterns.slice(0, 4).join(', ')}`);
-	return rules.join(' | ');
-}
-
 function createVariantChooserRow(row, selected_ref, on_select) {
 	let tr = globalThis.document.createElement('tr');
 	tr.className = row.variant.included ? '' : 'vintage_variant_excluded';
 	if (selected_ref.value === row.index) tr.classList.add('selected');
 	let state_text = Object.entries(row.variant.states).map(([key, value]) => `${key}: ${value}`).join(', ');
-	let warnings = row.resolved.warnings || [];
 	let cells = [
 		row.variant.variantCode,
 		state_text,
-		row.resolved.shape?.resolvedBase || '',
-		row.resolved.shape?.matchedPattern || '',
-		summarizeRules(row.resolved),
-		warnings.length ? warnings[0] : ''
+		row.resolved.shape?.resolvedBase || ''
 	];
 	cells.forEach(text => {
 		let td = globalThis.document.createElement('td');
@@ -222,7 +199,7 @@ function chooseVariant(asset_document, asset_index, variants, resolver_options, 
 	let table = document_create('table', 'vintage_variant_table');
 	let thead = globalThis.document.createElement('thead');
 	let header = globalThis.document.createElement('tr');
-	['Variant', 'States', 'Shape', 'Shape Rule', 'Rules', 'Warnings'].forEach(label => {
+	['Variant', 'States', 'Shape'].forEach(label => {
 		let th = globalThis.document.createElement('th');
 		th.textContent = label;
 		header.append(th);

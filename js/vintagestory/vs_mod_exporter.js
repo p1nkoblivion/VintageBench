@@ -228,7 +228,7 @@ export function validateVintageStoryModInfo(modinfo = {}, workspace = {}) {
 
 export function getVintageStoryModExportConfigFromSettings(settings_object, PathModule = null, project_path = '') {
 	let value = id => settings_object?.[id]?.value || '';
-	let domain = value('vintage_story_mod_domain') || normalizeModid(value('vintage_story_mod_name')) || 'mycoolmod';
+	let domain = value('vintage_story_mod_domain') || normalizeModid(value('vintage_story_mod_name')) || '';
 	let workspace = getVintageStoryWorkspaceFromSettings(settings_object, PathModule, project_path);
 	if (!workspace.modRoot || !workspace.domain) {
 		workspace = buildVintageStoryWorkspace({

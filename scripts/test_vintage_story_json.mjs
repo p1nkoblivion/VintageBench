@@ -257,6 +257,11 @@ function installVintageStoryShapeRoundTripMocks() {
 			this.rotation = stableClone(data.rotation || [0, 0, 0]);
 			this.shade = data.shade !== false;
 			this.vintage_story = stableClone(data.vintage_story || {});
+			this.vs_cullface_mode = data.vs_cullface_mode || 'preserve';
+			this.vs_glow = typeof data.vs_glow === 'number' ? data.vs_glow : -1;
+			this.vs_light_level = typeof data.vs_light_level === 'number' ? data.vs_light_level : -1;
+			this.vs_render_pass = typeof data.vs_render_pass === 'number' ? data.vs_render_pass : -1;
+			this.vs_wind_mode = data.vs_wind_mode || '';
 			this.children = [];
 			this.export = data.export !== false;
 			this.faces = {};
@@ -359,6 +364,8 @@ for (const fixture of ['default_cube.json', 'nested_rotated_cube.json', 'preserv
 const preservedShapeFixture = await readFixture('preserved_unknown_fields.json');
 resetVintageStoryRoundTripProject();
 applyVintageStoryShapeToProject(stableClone(preservedShapeFixture), join(fixtureRoot, 'preserved_unknown_fields.json'), {warnings: []});
+assert.equal(Outliner.root[0].vs_render_pass, -1, 'imported renderPass should be exposed on the cube');
+assert.equal(Outliner.root[0].vs_glow, 4, 'uniform imported glow should be exposed on the cube');
 const preservedShapeSaved = JSON.parse(compileVintageStoryShape());
 assert.equal(validateVintageStoryShape(preservedShapeSaved).ok, true);
 assertRoundTrippedShapePreserves(preservedShapeFixture, preservedShapeSaved, 'preserved_unknown_fields.json');
@@ -392,6 +399,8 @@ const complexRoundTripShape = {
 			from: [0, 0, 0],
 			to: [4, 6, 8],
 			shade: true,
+			renderPass: 2,
+			lightLevel: 8,
 			rotationOrigin: [2, 3, 4],
 			rotationX: 0,
 			rotationY: 22.5,
@@ -406,6 +415,8 @@ const complexRoundTripShape = {
 					rotation: 0,
 					enabled: true,
 					glow: 3,
+					windMode: 'WeakWind',
+					cullface: 'north',
 					vintageBenchUnknownFaceFixture: 'north-kept'
 				},
 				south: {
@@ -447,6 +458,49 @@ const complexShapeSaved = JSON.parse(compileVintageStoryShape());
 const complexShapeReopened = stableClone(complexShapeSaved);
 assert.equal(validateVintageStoryShape(complexShapeReopened).ok, true);
 assert.deepEqual(complexShapeReopened, complexRoundTripShape, 'complex shape import/save/reopen should preserve hierarchy, UVs, rotations, origins, textures, animations, attributes, and unknown fields');
+
+const editableVintageStoryElementFieldsShape = {
+	editor: {allAngles: true},
+	textureWidth: 16,
+	textureHeight: 16,
+	textures: {texture: ''},
+	elements: [
+		{
+			name: 'EditableMetadata',
+			from: [0, 0, 0],
+			to: [1, 1, 1],
+			renderPass: 1,
+			lightLevel: 4,
+			faces: {
+				north: {texture: '#texture', uv: [0, 0, 1, 1], glow: 5, windMode: 'WeakWind', cullface: 'north'},
+				east: {texture: '#texture', uv: [0, 0, 1, 1], glow: 5, windMode: 'WeakWind', cullface: 'east'}
+			},
+			rotationOrigin: [0, 0, 0]
+		}
+	]
+};
+resetVintageStoryRoundTripProject();
+applyVintageStoryShapeToProject(stableClone(editableVintageStoryElementFieldsShape), 'editable_vintage_story_element_fields.json', {warnings: []});
+let editableCube = Outliner.root[0];
+assert.equal(editableCube.vs_cullface_mode, 'self');
+assert.equal(editableCube.vs_glow, 5);
+assert.equal(editableCube.vs_light_level, 4);
+assert.equal(editableCube.vs_render_pass, 1);
+assert.equal(editableCube.vs_wind_mode, 'WeakWind');
+editableCube.vs_cullface_mode = 'off';
+editableCube.vs_glow = 12;
+editableCube.vs_light_level = 10;
+editableCube.vs_render_pass = 3;
+editableCube.vs_wind_mode = 'NormalWind';
+const editableFieldsSaved = JSON.parse(compileVintageStoryShape());
+assert.equal(editableFieldsSaved.elements[0].renderPass, 3);
+assert.equal(editableFieldsSaved.elements[0].lightLevel, 10);
+assert.equal(editableFieldsSaved.elements[0].faces.north.glow, 12);
+assert.equal(editableFieldsSaved.elements[0].faces.east.glow, 12);
+assert.equal(editableFieldsSaved.elements[0].faces.north.windMode, 'NormalWind');
+assert.equal(editableFieldsSaved.elements[0].faces.east.windMode, 'NormalWind');
+assert.equal(Object.prototype.hasOwnProperty.call(editableFieldsSaved.elements[0].faces.north, 'cullface'), false);
+assert.equal(Object.prototype.hasOwnProperty.call(editableFieldsSaved.elements[0].faces.east, 'cullface'), false);
 
 const transformShape = await readFixture('display_transforms_all.json');
 let transformWarnings = [];

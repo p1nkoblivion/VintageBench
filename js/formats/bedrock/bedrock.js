@@ -955,7 +955,7 @@ window.calculateVisibleBox = calculateVisibleBox;
 			}
 			if (!hasChildrenToExport(g)) return false;
 		}
-		if (!settings.export_empty_groups.value && !g.children.find(child => child.export)) return;
+		if (!g.children.find(child => child.export)) return;
 		if (g.children.length && g.children.allAre(c => c instanceof BoundingBox)) return;
 		//Bone
 		var bone = {}

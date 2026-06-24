@@ -22,7 +22,6 @@ var codec = new Codec('java_block', {
 		var clear_elements = []
 		var textures_used = []
 		var element_indices = []
-		var overflow_cubes = [];
 
 		function computeCube(s) {
 			if (s.export == false) return;
@@ -30,7 +29,7 @@ var codec = new Codec('java_block', {
 			var element = {}
 			element_indices[Cube.all.indexOf(s)] = clear_elements.length
 
-			if ((options.cube_name !== false && !settings.minifiedout.value) || options.cube_name === true) {
+			if (options.cube_name !== false) {
 				if (s.name !== 'cube') {
 					element.name = s.name
 				}
@@ -123,20 +122,6 @@ var codec = new Codec('java_block', {
 			}
 			element.faces = e_faces
 
-			if (Format.cube_size_limiter) {
-				function inVd(n) {
-					return n < -16 || n > 32; 
-				}
-				if (inVd(element.from[0]) ||
-					inVd(element.from[1]) ||
-					inVd(element.from[2]) ||
-					inVd(element.to[0]) ||
-					inVd(element.to[1]) ||
-					inVd(element.to[2])
-				) {
-					overflow_cubes.push(s);
-				}
-			}
 			if (Object.keys(element.faces).length) {
 				clear_elements.push(element)
 			}
@@ -176,21 +161,6 @@ var codec = new Codec('java_block', {
 			}
 		})
 
-		if (options.prevent_dialog !== true && overflow_cubes.length > 0 && settings.dialog_larger_cubes.value) {
-			Blockbench.showMessageBox({
-				translateKey: 'model_clipping',
-				icon: 'settings_overscan',
-				message: tl('message.model_clipping.message', [overflow_cubes.length]),
-				buttons: ['dialog.scale.select_overflow', 'dialog.ok'],
-				confirm: 1,
-				cancel: 1,
-			}, (result) => {
-				if (result == 0) {
-					selected.splice(0, Infinity, ...overflow_cubes)
-					updateSelection();
-				}
-			})
-		}
 		/*if (options.prevent_dialog !== true && clear_elements.length && item_parents.includes(Project.parent)) {
 			Blockbench.showMessageBox({
 				translateKey: 'invalid_builtin_parent',
@@ -203,8 +173,8 @@ var codec = new Codec('java_block', {
 		var blockmodel = {
 			format_version: Project.java_block_version
 		};
-		if (checkExport('comment', Project.credit || settings.credit.value)) {
-			blockmodel.credit = Project.credit || settings.credit.value
+		if (checkExport('comment', Project.credit)) {
+			blockmodel.credit = Project.credit
 		}
 		if (checkExport('parent', Project.parent != '')) {
 			blockmodel.parent = Project.parent

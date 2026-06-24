@@ -13,8 +13,8 @@ var codec = new Codec('optifine_entity', {
 	compile(options) {
 		if (options === undefined) options = {}
 		var entitymodel = {}
-		if (Project.credit || settings.credit.value) {
-			entitymodel.credit = Project.credit || settings.credit.value
+		if (Project.credit) {
+			entitymodel.credit = Project.credit
 		}
 		function getTexturePath(tex) {
 			let path = tex.name;
@@ -40,7 +40,7 @@ var codec = new Codec('optifine_entity', {
 		entitymodel.models = []
 
 		function compilePart(g) {
-			if (!settings.export_empty_groups.value && !g.children.find(child => child.export)) return;
+			if (!g.children.find(child => child.export)) return;
 			//Bone
 			var bone = {
 				part: g.name,
@@ -414,4 +414,3 @@ BARS.defineActions(function() {
 		}
 	})
 })
-

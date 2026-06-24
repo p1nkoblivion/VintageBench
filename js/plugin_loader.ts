@@ -36,7 +36,7 @@ export const Plugins = {
 	/**
 	 * The currently used path to the plugin API
 	 */
-	api_path: settings.cdn_mirror.value ? 'https://blckbn.ch/cdn/plugins' : 'https://cdn.jsdelivr.net/gh/JannisX11/blockbench-plugins/plugins',
+	api_path: 'https://cdn.jsdelivr.net/gh/JannisX11/blockbench-plugins/plugins',
 	path: '',
 	/**
 	 * Dev reload all side-loaded plugins
@@ -1033,10 +1033,6 @@ Plugins.loading_promise = new Promise((resolve, reject) => {
 			resolve();
 			Plugins.loading_promise = null;
 
-			if (settings.cdn_mirror.value == false && navigator.onLine) {
-				settings.cdn_mirror.set(true);
-				console.log('Switching to plugin CDN mirror. Restart to apply.');
-			}
 			if (Plugins.dialog) {
 				if (Plugins.dialog.content_vue) Plugins.dialog.content_vue._data.network_error = response.status;
 				Plugins.dialog.component.data.network_error = response.status;
@@ -1894,10 +1890,6 @@ BARS.defineActions(function() {
 			'load_plugin_from_url'
 		]),
 		click(e) {
-			if (settings.classroom_mode.value) {
-				Blockbench.showQuickMessage('message.classroom_mode.install_plugin');
-				return;
-			}
 			Plugins.dialog.show();
 			let none_installed = !Plugins.all.find(plugin => plugin.installed);
 			if (none_installed) Plugins.dialog.content_vue.tab = 'available';
@@ -1915,10 +1907,6 @@ BARS.defineActions(function() {
 		icon: 'fa-file-code',
 		category: 'blockbench',
 		click() {
-			if (settings.classroom_mode.value) {
-				Blockbench.showQuickMessage('message.classroom_mode.install_plugin');
-				return;
-			}
 			Blockbench.import({
 				resource_id: 'dev_plugin',
 				extensions: ['js'],
@@ -1932,10 +1920,6 @@ BARS.defineActions(function() {
 		icon: 'cloud_download',
 		category: 'blockbench',
 		click() {
-			if (settings.classroom_mode.value) {
-				Blockbench.showQuickMessage('message.classroom_mode.install_plugin');
-				return;
-			}
 			Blockbench.textPrompt('URL', '', url => {
 				new Plugin().loadFromURL(url, true)
 			})

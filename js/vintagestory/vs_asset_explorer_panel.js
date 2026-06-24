@@ -1,6 +1,5 @@
 import VintageStoryAssetExplorerPanel from './VintageStoryAssetExplorerPanel.vue';
 import { currentwindow, dialog, fs, PathModule, shell } from '../native_apis';
-import { getDefaultVintageBenchModExportsPath } from './vs_app_data_paths.js';
 import {
 	buildVintageStoryAssetExplorer,
 	getVintageStoryAssetExplorerFindingGroups,
@@ -17,9 +16,7 @@ function hasProject() {
 }
 
 function getConfig() {
-	let config = getVintageStoryModExportConfigFromSettings(settings, PathModule, Project?.save_path || Project?.export_path || '');
-	if (!config.packageOutputFolder) config.packageOutputFolder = getDefaultVintageBenchModExportsPath();
-	return config;
+	return getVintageStoryModExportConfigFromSettings(settings, PathModule, Project?.save_path || Project?.export_path || '');
 }
 
 function pathName(path) {
@@ -197,28 +194,13 @@ export const VintageStoryAssetExplorer = {
 
 	revealFinding(finding) {
 		if (finding?.filePath) revealPath(finding.filePath);
-	},
-
-	openPackageFolder() {
-		let last_package = Project?.vintage_story_data?.last_package_path || '';
-		if (last_package && fs.existsSync(last_package)) {
-			shell?.showItemInFolder?.(last_package);
-			return;
-		}
-		let config = this.config || getConfig();
-		let folder = config.packageOutputFolder || getDefaultVintageBenchModExportsPath();
-		if (folder && fs.existsSync(folder)) {
-			shell?.openPath?.(folder);
-			return;
-		}
-		showMessage('Open Package Folder', `Package output folder does not exist yet: ${folder || '(empty)'}`, 'warning');
 	}
 };
 
 Interface.definePanels(function() {
 	new Panel('vintage_story_asset_explorer', {
 		icon: 'account_tree',
-		condition: () => hasProject() || !!globalThis.isApp,
+		condition: () => (hasProject() || !!globalThis.isApp) && !globalThis.Modes?.animate,
 		default_position: {
 			slot: 'left_bar',
 			float_position: [0, 0],

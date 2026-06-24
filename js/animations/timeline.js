@@ -247,7 +247,6 @@ export const Timeline = {
 		Timeline.revealTime(seconds)
 	},
 	playAudioStutter() {
-		if (!settings.audio_scrubbing.value) return;
 		let effect_animator = Animation.selected?.animators.effects;
 		if (!effect_animator || effect_animator.muted.sound) return;
 		

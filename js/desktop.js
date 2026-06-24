@@ -753,62 +753,47 @@ async function closeBlockbenchWindow() {
 
 ipcRenderer.on('update-available', (event, arg) => {
 	console.log('Found new update:', arg.version)
-	if (settings.automatic_updates.value) {
-		ipcRenderer.send('allow-auto-update');
+	ipcRenderer.send('allow-auto-update');
 
 
-		let icon_node = Blockbench.getIconNode('donut_large');
-		icon_node.classList.add('spinning');
-		let click_action;
+	let icon_node = Blockbench.getIconNode('donut_large');
+	icon_node.classList.add('spinning');
+	let click_action;
 
-		let action = new Action('update_status', {
-			name: tl('menu.help.updating', [0]),
-			icon: icon_node,
-			click() {
-				if (click_action) click_action()
-			}
-		})
-		action.toElement('#update_menu');
-		MenuBar.menus.help.addAction('_');
-		MenuBar.menus.help.addAction(action);
+	let action = new Action('update_status', {
+		name: tl('menu.help.updating', [0]),
+		icon: icon_node,
+		click() {
+			if (click_action) click_action()
+		}
+	})
+	action.toElement('#update_menu');
+	MenuBar.menus.help.addAction('_');
+	MenuBar.menus.help.addAction(action);
 
-		ipcRenderer.on('update-progress', (event, status) => {
-			action.setName(tl('menu.help.updating', [Math.round(status.percent)]));
-		})
-		ipcRenderer.on('update-error', (event, err) => {
-			action.setName(tl('menu.help.update_failed'));
-			icon_node.textContent = 'warning';
-			icon_node.classList.remove('spinning')
-			click_action = function() {
-				currentwindow.openDevTools()
-			}
-			console.error(err);
-		})
-		ipcRenderer.on('update-downloaded', (event) => {
-			Blockbench.addFlag('update_downloaded');
-			action.setName(tl('message.update_after_restart'));
-			MenuBar.menus.help.removeAction(action);
-			icon_node.textContent = 'browser_updated';
-			icon_node.classList.remove('spinning');
-			icon_node.style.color = 'var(--color-confirm)';
-			click_action = function() {
-				Blockbench.showQuickMessage('message.update_after_restart')
-			}
-		})
-
-	} else {
-		addStartScreenSection('update_notification', {
-			color: 'var(--color-back)',
-			graphic: {type: 'icon', icon: 'update'},
-			text: [
-				{type: 'h3', text: tl('message.update_notification.title')},
-				{text: tl('message.update_notification.message')},
-				{type: 'button', text: tl('generic.enable'), click: (e) => {
-					settings.automatic_updates.set(true);
-				}}
-			]
-		})
-	}
+	ipcRenderer.on('update-progress', (event, status) => {
+		action.setName(tl('menu.help.updating', [Math.round(status.percent)]));
+	})
+	ipcRenderer.on('update-error', (event, err) => {
+		action.setName(tl('menu.help.update_failed'));
+		icon_node.textContent = 'warning';
+		icon_node.classList.remove('spinning')
+		click_action = function() {
+			currentwindow.openDevTools()
+		}
+		console.error(err);
+	})
+	ipcRenderer.on('update-downloaded', (event) => {
+		Blockbench.addFlag('update_downloaded');
+		action.setName(tl('message.update_after_restart'));
+		MenuBar.menus.help.removeAction(action);
+		icon_node.textContent = 'browser_updated';
+		icon_node.classList.remove('spinning');
+		icon_node.style.color = 'var(--color-confirm)';
+		click_action = function() {
+			Blockbench.showQuickMessage('message.update_after_restart')
+		}
+	})
 })
 
 Object.assign(window, {

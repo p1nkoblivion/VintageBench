@@ -427,7 +427,7 @@ export function capitalizeFirstLetter(string) {
 	return string.charAt(0).toUpperCase() + string.slice(1);
 }
 export function autoStringify(object) {
-	return compileJSON(object, {small: settings.minifiedout.value})
+	return compileJSON(object, {small: false})
 }
 export function pluralS(arr) {
 	if (arr.length === 1 || arr === 1) {

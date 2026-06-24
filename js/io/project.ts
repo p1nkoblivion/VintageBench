@@ -637,7 +637,7 @@ new Property(ModelProject, 'string', 'java_block_version', {
 });
 new Property(ModelProject, 'string', 'credit', {
 	label: 'dialog.project.credit',
-	condition: () => Project.credit && Project.credit !== settings.credit.value
+	condition: () => !!Project.credit
 });
 new Property(ModelProject, 'boolean', 'modded_entity_flip_y', {
 	label: 'dialog.project.modded_entity_flip_y',
